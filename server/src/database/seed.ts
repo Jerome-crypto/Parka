@@ -333,17 +333,26 @@ export const seedDatabase = async (force = false) => {
     `, [driverId]);
 
     // 11. Seed Reviews
+    // Review 1 for Garden City Parking
     await client.query(`
       INSERT INTO reviews (user_id, facility_id, rating, comment)
-      VALUES 
-        ($1, $2, 4.5, 'Very clean and secure. Staff were helpful. Will use again!'),
-        ($1, $2, 4.0, 'Good location, reasonable prices. Parking was easy to find.')
+      VALUES ($1, $2, 4.5, 'Very clean and secure. Staff were helpful. Will use again!')
     `, [driverId, facilityIds[0]]);
+
+    // Review 2 for Workers House Parking
+    await client.query(`
+      INSERT INTO reviews (user_id, facility_id, rating, comment)
+      VALUES ($1, $2, 4.0, 'Good location, reasonable prices. Parking was easy to find.')
+    `, [driverId, facilityIds[1]]);
 
     // Update facility ratings & review counts
     await client.query(`
-      UPDATE parking_facilities SET rating = 4.3, review_count = 2 WHERE id = $1
+      UPDATE parking_facilities SET rating = 4.5, review_count = 1 WHERE id = $1
     `, [facilityIds[0]]);
+
+    await client.query(`
+      UPDATE parking_facilities SET rating = 4.0, review_count = 1 WHERE id = $1
+    `, [facilityIds[1]]);
 
     await client.query('COMMIT');
     logger.info('Database seeded successfully.');
