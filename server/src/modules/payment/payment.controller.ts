@@ -9,7 +9,7 @@ import { createNotification } from '../../services/notificationService';
 
 const initiateSchema = z.object({
   amount: z.coerce.number().int().positive(),
-  phone: z.string().min(10),
+  phone: z.string().optional(),
   provider: z.enum(['mtn', 'airtel', 'cash']),
   sessionId: z.string().uuid().optional(),
   reservationId: z.string().uuid().optional(),
@@ -33,7 +33,21 @@ export const initiatePayment = async (req: Request, res: Response, next: NextFun
       status = 'completed';
       message = 'Cash payment recorded.';
     } else {
-      return next(new AppError('Mobile Money payments (MTN MoMo / Airtel Money) are coming soon! Please use Cash for now.', 400));
+      if (!validated.phone || validated.phone.length < 10) {
+        return next(new AppError('A valid phone number is required for mobile money payments.', 400));
+      }
+
+      const gateway = validated.provider === 'mtn' ? new MtnMoMoGateway() : new AirtelMoneyGateway();
+      const gatewayResult = await gateway.initiatePayment({
+        userId: req.user.id,
+        amount: validated.amount,
+        phone: validated.phone,
+        description: 'Parka parking session payment',
+      });
+
+      reference = gatewayResult.transactionReference;
+      status = 'pending';
+      message = gatewayResult.message;
     }
 
     // Insert payment record
@@ -72,6 +86,7 @@ export const initiatePayment = async (req: Request, res: Response, next: NextFun
       data: {
         payment,
         receipt,
+        transactionReference: reference,
         message,
       },
     });
@@ -172,9 +187,10 @@ export const getPaymentHistory = async (req: Request, res: Response, next: NextF
     if (!req.user) return next(new AppError('Unauthorized', 401));
 
     let queryStr = `
-      SELECT p.*, r.code as "reservationCode"
+      SELECT p.*, r.code as "reservationCode", rec.id as "receiptId", rec.receipt_number as "receiptNumber"
       FROM payments p
       LEFT JOIN reservations r ON p.reservation_id = r.id
+      LEFT JOIN receipts rec ON rec.payment_id = p.id
     `;
     const queryParams: unknown[] = [];
 

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { pool, query } from '../../config/database';
 import { AppError } from '../../utils/appError';
+import crypto from 'crypto';
 import { verifyQRToken } from '../../services/qrService';
 import { createNotification } from '../../services/notificationService';
 import { emitCheckIn, emitCheckOut, emitFacilityUpdate } from '../../services/socketService';
@@ -226,7 +227,7 @@ export const checkOutDriver = async (req: Request, res: Response, next: NextFunc
     );
     const updatedSession = updatedSessionRes.rows[0];
 
-    // 4. Update reservation if attached
+    // 4. Update reservation if attached or find driver by plate
     let driverId = null;
     if (session.reservation_id) {
       await client.query(
@@ -243,6 +244,47 @@ export const checkOutDriver = async (req: Request, res: Response, next: NextFunc
         `INSERT INTO reservation_statuses (reservation_id, status, notes)
          VALUES ($1, 'completed', 'Checked out, parking session complete.')`,
         [session.reservation_id]
+      );
+    } else {
+      // Find driver by plate for drive-ins
+      const vehicleRes = await client.query('SELECT driver_id FROM vehicles WHERE plate = $1 AND is_deleted = false', [session.vehicle_plate]);
+      if (vehicleRes.rows.length > 0) {
+        driverId = vehicleRes.rows[0].driver_id;
+      }
+    }
+
+    // 5. Automatically create a completed payment & receipt
+    if (driverId) {
+      let provider = 'cash';
+      const pmRes = await client.query('SELECT provider FROM user_payment_methods WHERE user_id = $1 AND is_default = true LIMIT 1', [driverId]);
+      if (pmRes.rows.length > 0) {
+        provider = pmRes.rows[0].provider;
+      }
+
+      const transactionReference = `${provider.toUpperCase() === 'CASH' ? 'CSH' : provider.toUpperCase() === 'MTN' ? 'MTN' : 'ATL'}-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
+      const paymentRes = await client.query(
+        `INSERT INTO payments (session_id, reservation_id, user_id, provider, status, transaction_reference, amount)
+         VALUES ($1, $2, $3, $4, 'completed', $5, $6)
+         RETURNING id`,
+        [validated.sessionId, session.reservation_id || null, driverId, provider, transactionReference, amountCharged]
+      );
+      
+      const paymentId = paymentRes.rows[0].id;
+      const receiptNo = `REC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+      
+      await client.query(
+        `INSERT INTO receipts (payment_id, receipt_number, details)
+         VALUES ($1, $2, $3)`,
+        [
+          paymentId,
+          receiptNo,
+          JSON.stringify({
+            amount: amountCharged,
+            method: provider.toUpperCase(),
+            reference: transactionReference,
+            date: new Date(),
+          }),
+        ]
       );
     }
 

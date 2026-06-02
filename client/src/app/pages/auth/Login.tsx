@@ -56,12 +56,6 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-12 px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <button 
-          onClick={() => navigate('/')}
-          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm mb-6 font-medium transition-colors"
-        >
-          <ArrowLeft size={16} /> Back to role select
-        </button>
         <div className="flex items-center gap-2 mb-6 justify-center">
           <div className="w-10 h-10 bg-[#F4B400] rounded-xl flex items-center justify-center">
             <MapPin size={20} className="text-[#0F172A]" />
@@ -74,7 +68,7 @@ export default function Login() {
         <p className="mt-2 text-center text-sm text-gray-500">
           Or{' '}
           <button
-            onClick={() => navigate(`/register?role=${roleParam}`)}
+            onClick={() => navigate('/register')}
             className="font-medium text-[#0F4C81] hover:text-[#0F4C81]/80 transition-colors"
           >
             create a new account
@@ -133,6 +127,15 @@ export default function Login() {
                   className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-[#0F4C81] focus:border-[#0F4C81] sm:text-sm text-gray-700 bg-gray-50/50"
                   placeholder="••••••••"
                 />
+              </div>
+              <div className="flex items-center justify-end mt-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-xs font-semibold text-[#0F4C81] hover:text-[#0F4C81]/80 transition-colors"
+                >
+                  Forgot password?
+                </button>
               </div>
             </div>
 

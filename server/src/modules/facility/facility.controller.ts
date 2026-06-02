@@ -17,6 +17,11 @@ const facilityCreateSchema = z.object({
   amenities: z.array(z.string()).default([]),
 });
 
+const reviewSchema = z.object({
+  rating: z.coerce.number().min(1).max(5),
+  comment: z.string().max(1000).optional(),
+});
+
 export const createFacility = async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.user) return next(new AppError('Unauthorized', 401));
@@ -103,6 +108,81 @@ export const getFacilityById = async (req: Request, res: Response, next: NextFun
       data: { facility: facilityRes.rows[0] },
     });
   } catch (err) {
+    next(err);
+  }
+};
+
+export const getFacilityReviews = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    const result = await query(
+      `SELECT rv.id, rv.rating::float as rating, rv.comment, rv.created_at,
+              u.name as "userName"
+       FROM reviews rv
+       JOIN users u ON u.id = rv.user_id
+       WHERE rv.facility_id = $1
+       ORDER BY rv.created_at DESC
+       LIMIT 50`,
+      [id]
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: { reviews: result.rows },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const upsertFacilityReview = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+    if (req.user.role !== 'DRIVER') {
+      return next(new AppError('Only drivers can review parking facilities.', 403));
+    }
+
+    const { id } = req.params;
+    const validated = reviewSchema.parse(req.body);
+
+    const facility = await query('SELECT id FROM parking_facilities WHERE id = $1', [id]);
+    if (facility.rows.length === 0) {
+      return next(new AppError('Parking facility not found.', 404));
+    }
+
+    const result = await query(
+      `INSERT INTO reviews (user_id, facility_id, rating, comment)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, facility_id)
+       DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [req.user.id, id, validated.rating, validated.comment || null]
+    );
+
+    await query(
+      `UPDATE parking_facilities f
+       SET rating = COALESCE(stats.avg_rating, 0),
+           review_count = COALESCE(stats.review_count, 0),
+           updated_at = CURRENT_TIMESTAMP
+       FROM (
+         SELECT facility_id, ROUND(AVG(rating)::numeric, 1) as avg_rating, COUNT(*)::int as review_count
+         FROM reviews
+         WHERE facility_id = $1
+         GROUP BY facility_id
+       ) stats
+       WHERE f.id = stats.facility_id`,
+      [id]
+    );
+
+    res.status(201).json({
+      status: 'success',
+      data: { review: result.rows[0] },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return next(new AppError(err.errors[0].message, 400));
+    }
     next(err);
   }
 };

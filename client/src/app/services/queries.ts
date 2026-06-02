@@ -390,3 +390,22 @@ export const useAuditLogs = () => {
     },
   });
 };
+
+// --- PASSWORD RESET ---
+export const useForgotPassword = () => {
+  return useMutation({
+    mutationFn: async (email: string) => {
+      const res = await apiClient.post('/auth/forgot-password', { email });
+      return res.data;
+    },
+  });
+};
+
+export const useResetPassword = () => {
+  return useMutation({
+    mutationFn: async (data: unknown) => {
+      const res = await apiClient.post('/auth/reset-password', data);
+      return res.data;
+    },
+  });
+};

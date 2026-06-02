@@ -2,11 +2,22 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../config/database';
 import { logger } from '../utils/logger';
 
-export const seedDatabase = async () => {
-  logger.info('Seeding database with test data...');
+export const seedDatabase = async (force = false) => {
+  logger.info('Checking if database seeding is required...');
   const client = await pool.connect();
 
   try {
+    if (!force) {
+      // Check if users already exist
+      const userCountRes = await client.query('SELECT COUNT(*) FROM users');
+      const count = parseInt(userCountRes.rows[0].count, 10);
+      if (count > 0) {
+        logger.info('Database already has users. Skipping auto-seeding.');
+        return;
+      }
+    }
+
+    logger.info('Seeding database with test data...');
     await client.query('BEGIN');
 
     // 1. Truncate all tables to prevent duplicates

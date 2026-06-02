@@ -1,6 +1,39 @@
 import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { query } from '../../config/database';
 import { AppError } from '../../utils/appError';
+
+const pricingRuleSchema = z.object({
+  facilityId: z.string().uuid(),
+  ruleName: z.string().min(2).max(50),
+  ruleType: z.enum(['multiplier', 'flat']).default('multiplier'),
+  ruleValue: z.coerce.number().positive(),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  dayOfWeek: z.coerce.number().int().min(0).max(6).optional(),
+  status: z.enum(['active', 'inactive']).default('active'),
+});
+
+const zoneSchema = z.object({
+  facilityId: z.string().uuid(),
+  name: z.string().min(1).max(50),
+});
+
+const spaceSchema = z.object({
+  zoneId: z.string().uuid(),
+  spaceNumber: z.string().min(1).max(20),
+  type: z.enum(['standard', 'disabled', 'ev']).default('standard'),
+  status: z.enum(['available', 'occupied', 'reserved']).default('available'),
+});
+
+const assertOperatorOwnsFacility = async (userId: string, facilityId: string) => {
+  const result = await query(
+    'SELECT id FROM parking_facilities WHERE id = $1 AND operator_id = $2',
+    [facilityId, userId]
+  );
+
+  return result.rows.length > 0;
+};
 
 export const getOperatorDashboard = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -96,6 +129,33 @@ export const getOperatorDashboard = async (req: Request, res: Response, next: Ne
     );
     const revenueData = trendRes.rows;
 
+    const paymentRes = await query(
+      `SELECT provider, COUNT(*)::int as count
+       FROM payments
+       WHERE session_id IN (
+         SELECT id FROM parking_sessions WHERE facility_id = ANY($1)
+       )
+       GROUP BY provider`,
+      [facilityIds]
+    );
+    const providerColors: Record<string, string> = {
+      cash: '#64748B',
+      mtn: '#F4B400',
+      airtel: '#DC2626',
+    };
+    const providerLabels: Record<string, string> = {
+      cash: 'Cash',
+      mtn: 'MTN MoMo',
+      airtel: 'Airtel Money',
+    };
+    const paymentData = paymentRes.rows.length > 0
+      ? paymentRes.rows.map((row) => ({
+          name: providerLabels[row.provider] || row.provider,
+          value: Number(row.count),
+          color: providerColors[row.provider] || '#64748B',
+        }))
+      : [{ name: 'No payments', value: 1, color: '#CBD5E1' }];
+
     res.status(200).json({
       status: 'success',
       data: {
@@ -107,9 +167,7 @@ export const getOperatorDashboard = async (req: Request, res: Response, next: Ne
         },
         revenueData,
         occupancyData,
-        paymentData: [
-          { name: 'Cash', value: 100, color: '#64748B' }, // Cash only for now
-        ],
+        paymentData,
         facilities,
       },
     });
@@ -124,12 +182,23 @@ export const getOperatorFacilities = async (req: Request, res: Response, next: N
 
     const result = await query(
       `SELECT f.*, 
-        COUNT(CASE WHEN s.status = 'occupied' THEN 1 END) as occupied
+        COALESCE(space_stats.occupied, 0) as occupied,
+        COALESCE(session_stats.revenue, 0) as revenue
        FROM parking_facilities f
-       LEFT JOIN parking_zones z ON z.facility_id = f.id
-       LEFT JOIN parking_spaces s ON s.zone_id = z.id
+       LEFT JOIN (
+         SELECT z.facility_id, COUNT(*)::int as occupied
+         FROM parking_spaces s
+         JOIN parking_zones z ON z.id = s.zone_id
+         WHERE s.status = 'occupied'
+         GROUP BY z.facility_id
+       ) space_stats ON space_stats.facility_id = f.id
+       LEFT JOIN (
+         SELECT facility_id, COALESCE(SUM(amount_charged), 0) as revenue
+         FROM parking_sessions
+         WHERE status = 'completed'
+         GROUP BY facility_id
+       ) session_stats ON session_stats.facility_id = f.id
        WHERE f.operator_id = $1
-       GROUP BY f.id
        ORDER BY f.created_at DESC`,
       [req.user.id]
     );
@@ -142,7 +211,7 @@ export const getOperatorFacilities = async (req: Request, res: Response, next: N
       occupied: parseInt(row.occupied || '0'),
       rate: row.price_per_hour,
       status: row.status,
-      revenue: `UGX 0`, // Placeholder or calculate it
+      revenue: `UGX ${Number(row.revenue || 0).toLocaleString()}`,
     }));
 
     res.status(200).json({
@@ -178,6 +247,258 @@ export const getOperatorReports = async (req: Request, res: Response, next: Next
       },
     });
   } catch (err) {
+    next(err);
+  }
+};
+
+export const getPricingRules = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+
+    const result = await query(
+      `SELECT pr.id, pr.facility_id as "facilityId", f.name as "facilityName",
+              pr.rule_name as "ruleName", pr.rule_type as "ruleType",
+              pr.rule_value::float as "ruleValue", pr.start_time as "startTime",
+              pr.end_time as "endTime", pr.day_of_week as "dayOfWeek",
+              pr.status, pr.created_at
+       FROM pricing_rules pr
+       JOIN parking_facilities f ON f.id = pr.facility_id
+       WHERE f.operator_id = $1
+       ORDER BY pr.created_at DESC`,
+      [req.user.id]
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: { pricingRules: result.rows },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const createPricingRule = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+    const validated = pricingRuleSchema.parse(req.body);
+
+    const ownsFacility = await assertOperatorOwnsFacility(req.user.id, validated.facilityId);
+    if (!ownsFacility && req.user.role !== 'ADMIN') {
+      return next(new AppError('Unauthorized access to this facility.', 403));
+    }
+
+    const result = await query(
+      `INSERT INTO pricing_rules (facility_id, rule_name, rule_type, rule_value, start_time, end_time, day_of_week, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, facility_id as "facilityId", rule_name as "ruleName", rule_type as "ruleType",
+                 rule_value::float as "ruleValue", start_time as "startTime", end_time as "endTime",
+                 day_of_week as "dayOfWeek", status, created_at`,
+      [
+        validated.facilityId,
+        validated.ruleName,
+        validated.ruleType,
+        validated.ruleValue,
+        validated.startTime || null,
+        validated.endTime || null,
+        validated.dayOfWeek ?? null,
+        validated.status,
+      ]
+    );
+
+    res.status(201).json({
+      status: 'success',
+      data: { pricingRule: result.rows[0] },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return next(new AppError(err.errors[0].message, 400));
+    }
+    next(err);
+  }
+};
+
+export const updatePricingRule = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+    const validated = pricingRuleSchema.partial().parse(req.body);
+    const { id } = req.params;
+
+    const rule = await query(
+      `SELECT pr.id, pr.facility_id
+       FROM pricing_rules pr
+       JOIN parking_facilities f ON f.id = pr.facility_id
+       WHERE pr.id = $1 AND (f.operator_id = $2 OR $3 = 'ADMIN')`,
+      [id, req.user.id, req.user.role]
+    );
+    if (rule.rows.length === 0) {
+      return next(new AppError('Pricing rule not found or unauthorized.', 404));
+    }
+
+    const result = await query(
+      `UPDATE pricing_rules
+       SET rule_name = COALESCE($1, rule_name),
+           rule_type = COALESCE($2, rule_type),
+           rule_value = COALESCE($3, rule_value),
+           start_time = COALESCE($4, start_time),
+           end_time = COALESCE($5, end_time),
+           day_of_week = COALESCE($6, day_of_week),
+           status = COALESCE($7, status)
+       WHERE id = $8
+       RETURNING id, facility_id as "facilityId", rule_name as "ruleName", rule_type as "ruleType",
+                 rule_value::float as "ruleValue", start_time as "startTime", end_time as "endTime",
+                 day_of_week as "dayOfWeek", status, created_at`,
+      [
+        validated.ruleName ?? null,
+        validated.ruleType ?? null,
+        validated.ruleValue ?? null,
+        validated.startTime ?? null,
+        validated.endTime ?? null,
+        validated.dayOfWeek ?? null,
+        validated.status ?? null,
+        id,
+      ]
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: { pricingRule: result.rows[0] },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return next(new AppError(err.errors[0].message, 400));
+    }
+    next(err);
+  }
+};
+
+export const deletePricingRule = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+    const result = await query(
+      `DELETE FROM pricing_rules pr
+       USING parking_facilities f
+       WHERE pr.facility_id = f.id
+         AND pr.id = $1
+         AND (f.operator_id = $2 OR $3 = 'ADMIN')
+       RETURNING pr.id`,
+      [req.params.id, req.user.id, req.user.role]
+    );
+
+    if (result.rows.length === 0) {
+      return next(new AppError('Pricing rule not found or unauthorized.', 404));
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Pricing rule deleted successfully.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getFacilityLayout = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+    const { facilityId } = req.params;
+
+    const ownsFacility = await assertOperatorOwnsFacility(req.user.id, facilityId);
+    if (!ownsFacility && req.user.role !== 'ADMIN') {
+      return next(new AppError('Unauthorized access to this facility.', 403));
+    }
+
+    const zones = await query(
+      `SELECT id, name, created_at
+       FROM parking_zones
+       WHERE facility_id = $1
+       ORDER BY name ASC`,
+      [facilityId]
+    );
+    const spaces = await query(
+      `SELECT s.id, s.zone_id as "zoneId", s.space_number as "spaceNumber", s.status, s.type
+       FROM parking_spaces s
+       JOIN parking_zones z ON z.id = s.zone_id
+       WHERE z.facility_id = $1
+       ORDER BY z.name ASC, s.space_number ASC`,
+      [facilityId]
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: { zones: zones.rows, spaces: spaces.rows },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const createZone = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+    const validated = zoneSchema.parse(req.body);
+
+    const ownsFacility = await assertOperatorOwnsFacility(req.user.id, validated.facilityId);
+    if (!ownsFacility && req.user.role !== 'ADMIN') {
+      return next(new AppError('Unauthorized access to this facility.', 403));
+    }
+
+    const result = await query(
+      'INSERT INTO parking_zones (facility_id, name) VALUES ($1, $2) RETURNING id, facility_id as "facilityId", name',
+      [validated.facilityId, validated.name]
+    );
+
+    res.status(201).json({
+      status: 'success',
+      data: { zone: result.rows[0] },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return next(new AppError(err.errors[0].message, 400));
+    }
+    next(err);
+  }
+};
+
+export const createSpace = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+    const validated = spaceSchema.parse(req.body);
+
+    const zone = await query(
+      `SELECT z.id, z.facility_id
+       FROM parking_zones z
+       JOIN parking_facilities f ON f.id = z.facility_id
+       WHERE z.id = $1 AND (f.operator_id = $2 OR $3 = 'ADMIN')`,
+      [validated.zoneId, req.user.id, req.user.role]
+    );
+    if (zone.rows.length === 0) {
+      return next(new AppError('Zone not found or unauthorized.', 404));
+    }
+
+    const result = await query(
+      `INSERT INTO parking_spaces (zone_id, space_number, status, type)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, zone_id as "zoneId", space_number as "spaceNumber", status, type`,
+      [validated.zoneId, validated.spaceNumber, validated.status, validated.type]
+    );
+
+    await query(
+      `UPDATE parking_facilities
+       SET total_spaces = total_spaces + 1,
+           available_spaces = available_spaces + CASE WHEN $1 = 'available' THEN 1 ELSE 0 END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [validated.status, zone.rows[0].facility_id]
+    );
+
+    res.status(201).json({
+      status: 'success',
+      data: { space: result.rows[0] },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return next(new AppError(err.errors[0].message, 400));
+    }
     next(err);
   }
 };

@@ -7,7 +7,10 @@ export const runMigrations = async () => {
   logger.info('Starting database migrations...');
   const client = await pool.connect();
   try {
-    const schemaPath = path.join(__dirname, 'schema.sql');
+    let schemaPath = path.join(__dirname, 'schema.sql');
+    if (!fs.existsSync(schemaPath)) {
+      schemaPath = path.join(__dirname, '..', '..', 'src', 'database', 'schema.sql');
+    }
     const sql = fs.readFileSync(schemaPath, 'utf8');
 
     await client.query('BEGIN');

@@ -7,6 +7,7 @@ import morgan from 'morgan';
 
 import { env } from './config/env';
 import { runMigrations } from './database/migrate';
+import { seedDatabase } from './database/seed';
 import { errorHandler } from './middleware/errorHandler';
 import { initSocket } from './services/socketService';
 import { logger } from './utils/logger';
@@ -23,6 +24,8 @@ import receiptRouter from './modules/receipt/receipt.router';
 import notificationRouter from './modules/notification/notification.router';
 import operatorRouter from './modules/operator/operator.router';
 import adminRouter from './modules/admin/admin.router';
+import profileRouter from './modules/profile/profile.router';
+import supportRouter from './modules/support/support.router';
 
 const app = express();
 const server = http.createServer(app);
@@ -30,10 +33,14 @@ const server = http.createServer(app);
 // Initialize WebSockets
 initSocket(server);
 
-// Security Middleware
 app.use(helmet());
+const allowedOrigins = [env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:5000'];
 app.use(cors({
-  origin: env.CLIENT_URL,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const isAllowed = allowedOrigins.includes(origin) || origin.endsWith('.onrender.com');
+    callback(null, isAllowed ? true : origin);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
 }));
@@ -72,6 +79,8 @@ app.use('/api/receipts', receiptRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/operator', operatorRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/profile', profileRouter);
+app.use('/api/support', supportRouter);
 
 // Global Error Handler
 app.use(errorHandler);
@@ -80,6 +89,9 @@ const startServer = async () => {
   try {
     // Self-healing: Run migrations on boot to ensure PostgreSQL state matches schema
     await runMigrations();
+
+    // Safe seeding on first boot
+    await seedDatabase(false);
 
     server.listen(env.PORT, () => {
       logger.info(`🚀 Parka server successfully started on port ${env.PORT} in ${env.NODE_ENV} mode.`);

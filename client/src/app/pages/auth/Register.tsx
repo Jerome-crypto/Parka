@@ -77,10 +77,10 @@ export default function Register() {
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-12 px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <button 
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/login')}
           className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm mb-6 font-medium transition-colors"
         >
-          <ArrowLeft size={16} /> Back to role select
+          <ArrowLeft size={16} /> Back to login
         </button>
         <div className="flex items-center gap-2 mb-6 justify-center">
           <div className="w-10 h-10 bg-[#F4B400] rounded-xl flex items-center justify-center">
@@ -94,7 +94,7 @@ export default function Register() {
         <p className="mt-2 text-center text-sm text-gray-500">
           Already have an account?{' '}
           <button
-            onClick={() => navigate(`/login?role=${role.toLowerCase()}`)}
+            onClick={() => navigate('/login')}
             className="font-medium text-[#0F4C81] hover:text-[#0F4C81]/80 transition-colors"
           >
             sign in here
@@ -116,27 +116,7 @@ export default function Register() {
               </div>
             )}
 
-            <div>
-              <label htmlFor="role" className="block text-sm font-semibold text-gray-700">
-                Register as
-              </label>
-              <div className="mt-1 grid grid-cols-3 gap-2">
-                {(['DRIVER', 'OPERATOR', 'ATTENDANT'] as Role[]).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRole(r)}
-                    className={`py-2 px-3 text-xs font-semibold rounded-xl border text-center transition-all ${
-                      role === r
-                        ? 'bg-[#0F4C81] text-white border-[#0F4C81]'
-                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
+
 
             <div>
               <label htmlFor="name" className="block text-sm font-semibold text-gray-700">

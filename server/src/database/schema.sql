@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS driver_profiles (
   user_id UUID UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   license_number VARCHAR(50),
   balance_ugx INT DEFAULT 0,
+  preferences JSONB DEFAULT '{}'::JSONB,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -131,6 +132,18 @@ CREATE TABLE IF NOT EXISTS pricing_rules (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- USER PAYMENT METHODS
+CREATE TABLE IF NOT EXISTS user_payment_methods (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  provider VARCHAR(20) NOT NULL CHECK (provider IN ('mtn', 'airtel', 'cash')),
+  label VARCHAR(80) NOT NULL,
+  phone VARCHAR(30),
+  is_default BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- RESERVATIONS
 CREATE TABLE IF NOT EXISTS reservations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -213,7 +226,33 @@ CREATE TABLE IF NOT EXISTS reviews (
   facility_id UUID REFERENCES parking_facilities(id) ON DELETE CASCADE,
   rating DECIMAL(2,1) CHECK (rating BETWEEN 1.0 AND 5.0),
   comment TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (user_id, facility_id)
+);
+
+-- SUPPORT TICKETS
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  session_id UUID REFERENCES parking_sessions(id) ON DELETE SET NULL,
+  reservation_id UUID REFERENCES reservations(id) ON DELETE SET NULL,
+  subject VARCHAR(120) NOT NULL,
+  message TEXT NOT NULL,
+  status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+  priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- PUSH SUBSCRIPTIONS
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT UNIQUE NOT NULL,
+  keys JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- AUDIT LOGS
@@ -245,6 +284,11 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- SAFE UPGRADES FOR EXISTING DATABASES
+ALTER TABLE driver_profiles ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::JSONB;
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_facility_unique ON reviews(user_id, facility_id);
+
 -- INDEXES
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_vehicles_driver_id ON vehicles(driver_id);
@@ -260,4 +304,8 @@ CREATE INDEX IF NOT EXISTS idx_sessions_status ON parking_sessions(status);
 CREATE INDEX IF NOT EXISTS idx_payments_reference ON payments(transaction_reference);
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id_read ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_payment_methods_user_id ON user_payment_methods(user_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_facility_id ON reviews(facility_id);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_user_id ON support_tickets(user_id);
+CREATE INDEX IF NOT EXISTS idx_pricing_rules_facility_id ON pricing_rules(facility_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
