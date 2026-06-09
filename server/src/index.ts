@@ -33,7 +33,39 @@ const server = http.createServer(app);
 // Initialize WebSockets
 initSocket(server);
 
-app.use(helmet());
+// ─── RAW CORS MIDDLEWARE ─────────────────────────────────────────────────────
+// Must come FIRST before helmet and other middleware.
+// Unconditionally sets Access-Control-Allow-Origin for every request from an
+// allowed origin so the browser never sees a missing CORS header.
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const origin = req.headers.origin as string | undefined;
+  const isAllowed =
+    !origin ||
+    origin.endsWith('.onrender.com') ||
+    origin.startsWith('http://localhost') ||
+    origin === 'https://parka-eqpq.onrender.com';
+
+  if (isAllowed && origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+  }
+
+  // End OPTIONS (preflight) requests immediately
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  next();
+});
+
+app.use(helmet({
+  // Disable CORP so cross-origin API responses are not blocked by the browser
+  crossOriginResourcePolicy: false,
+}));
 const allowedOrigins = [
   env.CLIENT_URL,
   'http://localhost:5173',
@@ -60,7 +92,7 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 200,
 };
-// Handle OPTIONS preflight for all routes BEFORE other middleware
+// Also register the cors package as a belt-and-suspenders fallback
 app.options('*', cors(corsOptions));
 app.use(cors(corsOptions));
 
