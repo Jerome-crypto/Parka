@@ -34,16 +34,35 @@ const server = http.createServer(app);
 initSocket(server);
 
 app.use(helmet());
-const allowedOrigins = [env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:5000'];
-app.use(cors({
-  origin: (origin, callback) => {
+const allowedOrigins = [
+  env.CLIENT_URL,
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://localhost:5000',
+  'https://parka-eqpq.onrender.com',
+];
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
-    const isAllowed = allowedOrigins.includes(origin) || origin.endsWith('.onrender.com');
-    callback(null, isAllowed ? true : origin);
+    const isAllowed =
+      allowedOrigins.includes(origin) ||
+      origin.endsWith('.onrender.com') ||
+      origin.startsWith('http://localhost');
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: Origin '${origin}' is not allowed`));
+    }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
-}));
+  optionsSuccessStatus: 200,
+};
+// Handle OPTIONS preflight for all routes BEFORE other middleware
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 
 // Body parsing
 app.use(express.json());
