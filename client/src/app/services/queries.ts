@@ -3,6 +3,36 @@ import { apiClient } from './apiClient';
 
 export const mapFacility = (f: any) => {
   if (!f) return f;
+
+  // Default user location (Nakasero, Kampala)
+  const userLat = 0.3190;
+  const userLng = 32.5850;
+
+  const facLat = f.latitude !== undefined ? Number(f.latitude) : 0;
+  const facLng = f.longitude !== undefined ? Number(f.longitude) : 0;
+
+  let calculatedDistance = 0.5;
+  if (facLat && facLng) {
+    // Haversine formula in JS
+    const R = 6371; // earth radius in km
+    const dLat = (facLat - userLat) * Math.PI / 180;
+    const dLng = (facLng - userLng) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(userLat * Math.PI / 180) * Math.cos(facLat * Math.PI / 180) * 
+      Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    calculatedDistance = R * c;
+  }
+
+  const distanceKm = f.distance_km !== undefined 
+    ? Number(f.distance_km) 
+    : (f.distanceKm !== undefined ? Number(f.distanceKm) : Math.round(calculatedDistance * 10) / 10);
+
+  const etaMin = f.eta_min !== undefined 
+    ? Number(f.eta_min) 
+    : (f.etaMin !== undefined ? Number(f.etaMin) : Math.max(3, Math.round((distanceKm / 25) * 60)));
+
   return {
     ...f,
     totalSpaces: f.total_spaces !== undefined ? Number(f.total_spaces) : (f.totalSpaces ?? 0),
@@ -12,8 +42,8 @@ export const mapFacility = (f: any) => {
     reviewCount: f.review_count !== undefined ? Number(f.review_count) : (f.reviewCount ?? 0),
     image: f.image_url !== undefined ? f.image_url : (f.image ?? ''),
     hasSecurity: f.has_security !== undefined ? Boolean(f.has_security) : (f.hasSecurity ?? false),
-    distanceKm: f.distance_km !== undefined ? Number(f.distance_km) : (f.distanceKm ?? 0.5),
-    etaMin: f.eta_min !== undefined ? Number(f.eta_min) : (f.etaMin ?? 5),
+    distanceKm,
+    etaMin,
   };
 };
 
