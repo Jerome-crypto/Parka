@@ -271,7 +271,7 @@ export default function AttendantApp() {
                 <span className="text-xs font-medium">Scan QR</span>
               </button>
               <button
-                onClick={() => setScreen('sessions')}
+                onClick={() => setScreen('scanner')}
                 className="flex flex-col items-center gap-2 p-4 bg-white border border-gray-100 rounded-xl"
               >
                 <Car size={22} className="text-[#0F4C81]" />

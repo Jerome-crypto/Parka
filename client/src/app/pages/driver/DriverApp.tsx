@@ -12,7 +12,8 @@ import {
 import {
   useFacilities, useVehicles, useReservations, useNotifications,
   useCreateReservation, useCancelReservation, useMarkNotificationRead, useInitiatePayment,
-  useCreateVehicle, useSessions, useCheckoutSession
+  useCreateVehicle, useSessions, useCheckoutSession, useCreateTicket,
+  useFacilityReviews, useCreateReview
 } from '../../services/queries';
 import { useAuth } from '../../contexts/AuthContext';
 import LeafletMap from '../../components/LeafletMap';
@@ -162,6 +163,57 @@ export default function DriverApp() {
   const initiatePaymentMutation = useInitiatePayment();
   const createVehicleMutation = useCreateVehicle();
   const checkoutMutation = useCheckoutSession();
+  const createTicketMutation = useCreateTicket();
+
+  const { data: dbReviews = [], isLoading: isLoadingReviews } = useFacilityReviews(selectedFacility?.id || '');
+  const createReviewMutation = useCreateReview();
+
+  // Review submission state
+  const [newRating, setNewRating] = useState(5);
+  const [newComment, setNewComment] = useState('');
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFacility) return;
+    try {
+      await createReviewMutation.mutateAsync({
+        facilityId: selectedFacility.id,
+        rating: newRating,
+        comment: newComment || undefined,
+      });
+      setNewComment('');
+      setNewRating(5);
+      alert('Thank you for your feedback! Review submitted successfully.');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to submit review.');
+    }
+  };
+
+  const handleCreateSupportTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supportSubject || !supportMessage) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    try {
+      await createTicketMutation.mutateAsync({
+        subject: supportSubject,
+        message: supportMessage,
+        priority: supportPriority,
+        sessionId: supportSessionId,
+        reservationId: supportReservationId,
+      });
+      alert('Support ticket created successfully! Our team will get back to you shortly.');
+      setSupportSubject('');
+      setSupportMessage('');
+      setSupportPriority('normal');
+      setSupportSessionId(undefined);
+      setSupportReservationId(undefined);
+      setShowSupportModal(false);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to create support ticket.');
+    }
+  };
 
   const handleAddVehicle = async (e: any) => {
     e.preventDefault();
@@ -202,10 +254,26 @@ export default function DriverApp() {
   const [selectedFacility, setSelectedFacility] = useState<ParkingFacility | null>(null);
   const [reserveStep, setReserveStep] = useState(1);
   const [reserveVehicle, setReserveVehicle] = useState('');
-  const [reserveDate, setReserveDate] = useState('Mon, 3 Jun 2024');
+  const [reserveDate, setReserveDate] = useState(() => {
+    const d = new Date();
+    return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  });
   const [reserveTime, setReserveTime] = useState('10:30 AM');
   const [reserveDuration, setReserveDuration] = useState(2);
   const [confirmedResId, setConfirmedResId] = useState('');
+
+  // Support Ticket Form States
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [supportSubject, setSupportSubject] = useState('');
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportPriority, setSupportPriority] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal');
+  const [supportSessionId, setSupportSessionId] = useState<string | undefined>(undefined);
+  const [supportReservationId, setSupportReservationId] = useState<string | undefined>(undefined);
+
+  // Settings Toggles States
+  const [pushNotifications, setPushNotifications] = useState(true);
+  const [emailInvoices, setEmailInvoices] = useState(true);
+  const [locationTracking, setLocationTracking] = useState(true);
   const [confirmedResToken, setConfirmedResToken] = useState('');
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const activeSession = dbSessions.find((s: any) => s.status === 'active');
@@ -430,8 +498,37 @@ export default function DriverApp() {
               {[
                 { icon: QrCode, label: 'My QR', color: '#0F4C81', action: () => push('session') },
                 { icon: Receipt, label: 'Receipt', color: '#2E8B57', action: () => push('receipt') },
-                { icon: Navigation, label: 'Navigate', color: '#7C3AED', action: () => {} },
-                { icon: Phone, label: 'Support', color: '#B45309', action: () => {} },
+                {
+                  icon: Navigation,
+                  label: 'Navigate',
+                  color: '#7C3AED',
+                  action: () => {
+                    const upcomingRes = dbReservations.find((r: any) => r.status === 'upcoming');
+                    const upcomingFacility = upcomingRes ? dbFacilities.find((f: any) => f.id === upcomingRes.facility_id) : null;
+                    const nearestFacility = [...dbFacilities].sort((a: any, b: any) => a.distanceKm - b.distanceKm)[0];
+                    const target = activeFacility || upcomingFacility || nearestFacility;
+
+                    if (target) {
+                      const lat = target.latitude || (target as any).lat;
+                      const lng = target.longitude || (target as any).lng;
+                      if (lat && lng) {
+                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+                      } else {
+                        alert(`Could not find coordinates for ${target.name}.`);
+                      }
+                    } else {
+                      alert('No parking facilities found to navigate to.');
+                    }
+                  }
+                },
+                {
+                  icon: Phone,
+                  label: 'Support',
+                  color: '#B45309',
+                  action: () => {
+                    setShowSupportModal(true);
+                  }
+                },
               ].map((item) => (
                 <button
                   key={item.label}
@@ -639,11 +736,6 @@ export default function DriverApp() {
     if (!selectedFacility) return null;
     const f = selectedFacility;
     const status = getAvailabilityStatus(f);
-    const reviews = [
-      { name: 'David K.', rating: 5, text: 'Very clean and secure. Staff were helpful. Will use again!', date: '2 days ago' },
-      { name: 'Mary N.', rating: 4, text: 'Good location, reasonable prices. Parking was easy to find.', date: '1 week ago' },
-      { name: 'John O.', rating: 4, text: 'Covered parking is a plus during the rainy season.', date: '2 weeks ago' },
-    ];
     return (
       <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
         {/* Header image */}
@@ -756,34 +848,128 @@ export default function DriverApp() {
           {/* Reviews */}
           <div>
             <h3 className="font-semibold mb-3">Recent Reviews</h3>
-            <div className="space-y-3">
-              {reviews.map((r) => (
-                <div key={r.name} className="bg-white rounded-xl p-3 border border-gray-100">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-[#EFF6FF] flex items-center justify-center">
-                        <span className="text-xs font-semibold text-[#0F4C81]">{r.name[0]}</span>
+            {isLoadingReviews ? (
+              <div className="text-center py-4 text-sm text-gray-400">Loading reviews...</div>
+            ) : dbReviews.length === 0 ? (
+              <div className="bg-white rounded-xl p-4 border border-gray-100 text-center text-sm text-gray-500">
+                No reviews yet. Be the first to review this facility!
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {dbReviews.map((r: any) => (
+                  <div key={r.id} className="bg-white rounded-xl p-3 border border-gray-100">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-[#EFF6FF] flex items-center justify-center">
+                          <span className="text-xs font-semibold text-[#0F4C81]">
+                            {(r.userName || 'A')[0].toUpperCase()}
+                          </span>
+                        </div>
+                        <span className="text-sm font-medium">{r.userName || 'Anonymous'}</span>
                       </div>
-                      <span className="text-sm font-medium">{r.name}</span>
+                      <div className="flex items-center gap-0.5">
+                        {Array.from({ length: Math.round(r.rating) }).map((_, i) => (
+                          <Star key={i} size={11} className="fill-[#F4B400] text-[#F4B400]" />
+                        ))}
+                        {Array.from({ length: 5 - Math.round(r.rating) }).map((_, i) => (
+                          <Star key={i} size={11} className="text-gray-200" />
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-0.5">
-                      {Array.from({ length: r.rating }).map((_, i) => (
-                        <Star key={i} size={11} className="fill-[#F4B400] text-[#F4B400]" />
-                      ))}
-                    </div>
+                    {r.comment && <p className="text-sm text-gray-600">{r.comment}</p>}
+                    <p className="text-xs text-gray-400 mt-1">
+                      {new Date(r.created_at).toLocaleDateString(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-600">{r.text}</p>
-                  <p className="text-xs text-gray-400 mt-1">{r.date}</p>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Write a Review Form */}
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <h3 className="font-semibold text-sm text-[#0F172A] mb-3">Write a Review</h3>
+            <form onSubmit={handleSubmitReview} className="space-y-4">
+              {/* Rating selection */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">Your Rating</label>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      type="button"
+                      key={star}
+                      onClick={() => setNewRating(star)}
+                      className="focus:outline-none transition-transform active:scale-125"
+                    >
+                      <Star
+                        size={24}
+                        className={`${
+                          star <= newRating
+                            ? 'fill-[#F4B400] text-[#F4B400]'
+                            : 'text-gray-300'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  <span className="text-xs font-semibold text-gray-500 ml-2">
+                    {newRating === 5
+                      ? 'Excellent!'
+                      : newRating === 4
+                      ? 'Very Good'
+                      : newRating === 3
+                      ? 'Good'
+                      : newRating === 2
+                      ? 'Fair'
+                      : 'Poor'}
+                  </span>
                 </div>
-              ))}
-            </div>
+              </div>
+
+              {/* Comment text area */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Your Comment</label>
+                <textarea
+                  placeholder="Share your experience (cleanliness, security, ease of parking)..."
+                  rows={3}
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#0F4C81] outline-none text-[#0F172A] resize-none"
+                />
+              </div>
+
+              {/* Submit button */}
+              <button
+                type="submit"
+                disabled={createReviewMutation.isPending}
+                className="w-full py-2.5 bg-[#0F4C81] text-white text-sm font-semibold rounded-xl flex items-center justify-center gap-2 hover:bg-[#0A3660] transition-colors disabled:opacity-50"
+              >
+                {createReviewMutation.isPending ? (
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  'Submit Review'
+                )}
+              </button>
+            </form>
           </div>
         </div>
 
         {/* CTAs */}
         <div className="sticky bottom-0 bg-white border-t border-gray-100 px-4 py-3 flex gap-3 mb-16 md:mb-0">
           <button
-            className="flex-1 flex items-center justify-center gap-2 py-3 border border-[#0F4C81] text-[#0F4C81] rounded-xl font-semibold text-sm"
+            onClick={() => {
+              const lat = f.latitude || (f as any).lat;
+              const lng = f.longitude || (f as any).lng;
+              if (lat && lng) {
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+              } else {
+                alert(`Could not find coordinates for ${f.name}.`);
+              }
+            }}
+            className="flex-1 flex items-center justify-center gap-2 py-3 border border-[#0F4C81] text-[#0F4C81] rounded-xl font-semibold text-sm hover:bg-blue-50 transition-colors"
           >
             <Navigation size={16} /> Navigate
           </button>
@@ -809,7 +995,11 @@ export default function DriverApp() {
     if (!selectedFacility) return null;
     const f = selectedFacility;
     const totalCost = f.pricePerHour * reserveDuration;
-    const times = ['8:00 AM', '9:00 AM', '10:00 AM', '10:30 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM'];
+    const times = [
+      '8:00 AM', '9:00 AM', '10:00 AM', '10:30 AM', '11:00 AM',
+      '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM',
+      '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM', '10:00 PM', '11:00 PM'
+    ];
 
     const steps = ['Vehicle', 'Date & Time', 'Duration', 'Review', 'Confirm'];
 
@@ -981,7 +1171,10 @@ export default function DriverApp() {
                 setReserveStep((s) => s + 1);
               } else {
                 try {
-                  const arrivalDateTime = new Date();
+                  const arrivalDateTime = new Date(reserveDate);
+                  if (isNaN(arrivalDateTime.getTime())) {
+                    arrivalDateTime.setTime(new Date().getTime());
+                  }
                   const [time, modifier] = reserveTime.split(' ');
                   let [hours, minutes] = time.split(':').map(Number);
                   if (modifier === 'PM' && hours < 12) hours += 12;
@@ -1195,7 +1388,15 @@ export default function DriverApp() {
               <Receipt size={20} />
               <span className="text-xs font-medium text-gray-700">Receipt</span>
             </button>
-            <button className="flex flex-col items-center gap-2 p-3 bg-white border border-gray-100 rounded-xl">
+            <button
+              onClick={() => {
+                setSupportSessionId(activeSession.id);
+                setSupportSubject(`Support for Active Session at ${activeSession.facilityName}`);
+                setSupportPriority('high');
+                setShowSupportModal(true);
+              }}
+              className="flex flex-col items-center gap-2 p-3 bg-white border border-gray-100 rounded-xl hover:bg-slate-50 transition-colors"
+            >
               <Phone size={20} className="text-gray-600" />
               <span className="text-xs font-medium text-gray-700">Support</span>
             </button>
@@ -1338,7 +1539,23 @@ export default function DriverApp() {
         </div>
 
         <div className="flex gap-3 mt-6 w-full">
-          <button className="flex-1 py-3 border border-[#0F4C81] text-[#0F4C81] rounded-xl font-medium text-sm">
+          <button
+            onClick={() => {
+              const totalCharges = Math.round(sessionCharges * 1.05);
+              const textContent = `Parka Parking Receipt\nFacility: ${activeSession?.facilityName || 'Garden City Parking'}\nAmount Paid: ${formatUGX(totalCharges)}\nVehicle: ${activeSession?.vehicle_plate || 'UAB 456H'}\nReceipt ID: REC-${Math.floor(100000 + Math.random() * 900000)}`;
+              if (navigator.share) {
+                navigator.share({
+                  title: 'Parka Parking Receipt',
+                  text: textContent,
+                  url: window.location.origin,
+                }).catch(console.error);
+              } else {
+                navigator.clipboard.writeText(textContent);
+                alert('Receipt details copied to clipboard!');
+              }
+            }}
+            className="flex-1 py-3 border border-[#0F4C81] text-[#0F4C81] rounded-xl font-medium text-sm hover:bg-blue-50 transition-colors"
+          >
             Share Receipt
           </button>
           <button
@@ -1942,6 +2159,89 @@ export default function DriverApp() {
         </div>
       )}
 
+      {/* Contact Support Modal */}
+      {showSupportModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative text-left">
+            <button
+              onClick={() => {
+                setShowSupportModal(false);
+                setSupportSessionId(undefined);
+                setSupportReservationId(undefined);
+              }}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200"
+            >
+              <X size={16} />
+            </button>
+            <h3 className="font-bold text-lg text-[#0F172A] mb-4">Contact Support</h3>
+            <form onSubmit={handleCreateSupportTicket} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Subject *</label>
+                <input
+                  type="text"
+                  placeholder="What can we help you with?"
+                  required
+                  value={supportSubject}
+                  onChange={(e) => setSupportSubject(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#0F4C81] outline-none text-[#0F172A]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Priority</label>
+                <div className="flex gap-2">
+                  {(['low', 'normal', 'high', 'urgent'] as const).map((p) => (
+                    <button
+                      type="button"
+                      key={p}
+                      onClick={() => setSupportPriority(p)}
+                      className={`flex-1 py-2 rounded-xl border text-xs font-bold text-center capitalize transition-colors ${
+                        supportPriority === p
+                          ? p === 'urgent'
+                            ? 'border-red-500 bg-red-50 text-red-800'
+                            : p === 'high'
+                            ? 'border-orange-500 bg-orange-50 text-orange-800'
+                            : 'border-[#0F4C81] bg-[#EFF6FF] text-[#0F4C81]'
+                          : 'border-gray-100 text-gray-500 bg-white'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {supportSessionId && (
+                <div className="bg-[#EFF6FF] border border-blue-100 rounded-xl p-3 text-xs text-[#0F4C81] font-mono">
+                  Linked Session: {supportSessionId.substring(0, 8).toUpperCase()}
+                </div>
+              )}
+              {supportReservationId && (
+                <div className="bg-[#EFF6FF] border border-blue-100 rounded-xl p-3 text-xs text-[#0F4C81] font-mono">
+                  Linked Booking: {supportReservationId}
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Message *</label>
+                <textarea
+                  placeholder="Describe your issue or question in detail..."
+                  required
+                  rows={4}
+                  value={supportMessage}
+                  onChange={(e) => setSupportMessage(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#0F4C81] outline-none text-[#0F172A] resize-none"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={createTicketMutation.isPending}
+                className="w-full py-3 bg-[#0F4C81] text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-[#0A3660] transition-colors"
+              >
+                {createTicketMutation.isPending ? 'Sending Request...' : 'Submit Support Request'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Settings Slide-over Drawer */}
       {activeSettingsDrawer && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex justify-end">
@@ -2044,17 +2344,20 @@ export default function DriverApp() {
                   <h3 className="font-bold text-xl text-[#0F172A]">{activeSettingsDrawer}</h3>
                   <div className="space-y-4">
                     {[
-                      { label: 'Push Notifications', desc: 'Alert me about reservation starts' },
-                      { label: 'Email Invoices', desc: 'Send receipts to my email' },
-                      { label: 'Location Tracking', desc: 'Recommend nearby parking dynamically' }
+                      { label: 'Push Notifications', desc: 'Alert me about reservation starts', value: pushNotifications, toggle: () => setPushNotifications(!pushNotifications) },
+                      { label: 'Email Invoices', desc: 'Send receipts to my email', value: emailInvoices, toggle: () => setEmailInvoices(!emailInvoices) },
+                      { label: 'Location Tracking', desc: 'Recommend nearby parking dynamically', value: locationTracking, toggle: () => setLocationTracking(!locationTracking) }
                     ].map((opt) => (
                       <div key={opt.label} className="flex items-center justify-between p-3 border border-gray-50 rounded-xl hover:bg-slate-50/50">
                         <div>
                           <p className="text-sm font-semibold text-[#0F172A]">{opt.label}</p>
                           <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
                         </div>
-                        <div className="w-9 h-5 bg-green-500 rounded-full flex items-center p-0.5 cursor-pointer">
-                          <div className="w-4 h-4 bg-white rounded-full shadow-sm transform translate-x-4" />
+                        <div
+                          onClick={opt.toggle}
+                          className={`w-9 h-5 rounded-full flex items-center p-0.5 cursor-pointer transition-colors duration-200 ${opt.value ? 'bg-green-500' : 'bg-gray-300'}`}
+                        >
+                          <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-250 ${opt.value ? 'translate-x-4' : 'translate-x-0'}`} />
                         </div>
                       </div>
                     ))}

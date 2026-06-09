@@ -81,6 +81,24 @@ export const useCreateFacility = () => {
   });
 };
 
+export const useUpdateFacility = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: unknown }) => {
+      const res = await apiClient.put(`/facilities/${id}`, data);
+      return mapFacility(res.data.data.facility);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['facilities'] });
+      queryClient.invalidateQueries({ queryKey: ['operator', 'facilities'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'facilities'] });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: ['facilities', data.id, 'availability'] });
+      }
+    },
+  });
+};
+
 // --- VEHICLES ---
 export const useVehicles = () => {
   return useQuery({
@@ -253,6 +271,19 @@ export const useConfirmPayment = () => {
   });
 };
 
+export const useCreateTicket = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: unknown) => {
+      const res = await apiClient.post('/support/tickets', data);
+      return res.data.data.ticket;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['support', 'tickets'] });
+    },
+  });
+};
+
 export const useReceipt = (id: string) => {
   return useQuery({
     queryKey: ['receipts', id],
@@ -406,6 +437,31 @@ export const useResetPassword = () => {
     mutationFn: async (data: unknown) => {
       const res = await apiClient.post('/auth/reset-password', data);
       return res.data;
+    },
+  });
+};
+
+export const useFacilityReviews = (facilityId: string) => {
+  return useQuery({
+    queryKey: ['facilities', facilityId, 'reviews'],
+    queryFn: async () => {
+      const res = await apiClient.get(`/facilities/${facilityId}/reviews`);
+      return res.data.data.reviews || [];
+    },
+    enabled: !!facilityId,
+  });
+};
+
+export const useCreateReview = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ facilityId, rating, comment }: { facilityId: string; rating: number; comment?: string }) => {
+      const res = await apiClient.post(`/facilities/${facilityId}/reviews`, { rating, comment });
+      return res.data.data.review;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['facilities', variables.facilityId] });
+      queryClient.invalidateQueries({ queryKey: ['facilities', variables.facilityId, 'reviews'] });
     },
   });
 };

@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { apiClient } from '../../services/apiClient';
 import {
   useAdminUsers,
   useToggleUserStatus,
@@ -49,6 +50,62 @@ export default function AdminApp() {
   const [userTab, setUserTab] = useState<UserTab>('drivers');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeUserMenu, setActiveUserMenu] = useState<string | null>(null);
+
+  // User onboarding states
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserRole, setNewUserRole] = useState<'DRIVER' | 'OPERATOR' | 'ATTENDANT'>('OPERATOR');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPhone, setNewUserPhone] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserCompanyName, setNewUserCompanyName] = useState('');
+  const [newUserBusinessLicense, setNewUserBusinessLicense] = useState('');
+  const [newUserFacilityId, setNewUserFacilityId] = useState('');
+  const [newUserShiftInfo, setNewUserShiftInfo] = useState('7:00 AM – 3:00 PM');
+  const [createUserLoading, setCreateUserLoading] = useState(false);
+
+  const handleCreateUser = async (e: any) => {
+    e.preventDefault();
+    if (!newUserName || !newUserEmail || !newUserPassword) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    setCreateUserLoading(true);
+    try {
+      const payload: any = {
+        name: newUserName,
+        email: newUserEmail,
+        phone: newUserPhone || undefined,
+        password: newUserPassword,
+        role: newUserRole,
+      };
+      if (newUserRole === 'OPERATOR') {
+        payload.companyName = newUserCompanyName || undefined;
+        payload.businessLicense = newUserBusinessLicense || undefined;
+      } else if (newUserRole === 'ATTENDANT') {
+        payload.facilityId = newUserFacilityId || undefined;
+        payload.shiftInfo = newUserShiftInfo || undefined;
+      }
+
+      await apiClient.post('/auth/register', payload);
+
+      alert('User created successfully!');
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserPhone('');
+      setNewUserPassword('');
+      setNewUserCompanyName('');
+      setNewUserBusinessLicense('');
+      setNewUserFacilityId('');
+      setShowAddUserModal(false);
+      refetchUsers();
+      refetchAudit();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to create user.');
+    } finally {
+      setCreateUserLoading(false);
+    }
+  };
 
   const navItems: { id: Screen; icon: typeof LayoutDashboard; label: string }[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -270,15 +327,26 @@ export default function AdminApp() {
         <div className="bg-white border-b border-gray-100 px-5 pt-8 pb-3">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-lg text-[#0F172A]">User Management</h2>
-            <div className="flex items-center gap-2 border border-gray-100 rounded-xl px-2.5 py-1.5 w-44 md:w-56 bg-slate-50">
-              <Search size={14} className="text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search..."
-                className="text-xs bg-transparent border-0 outline-none w-full text-[#0F172A]"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 border border-gray-100 rounded-xl px-2.5 py-1.5 w-36 md:w-56 bg-slate-50">
+                <Search size={14} className="text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="text-xs bg-transparent border-0 outline-none w-full text-[#0F172A]"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <button
+                onClick={() => {
+                  setNewUserRole(userTab === 'drivers' ? 'DRIVER' : userTab === 'operators' ? 'OPERATOR' : 'ATTENDANT');
+                  setShowAddUserModal(true);
+                }}
+                className="bg-[#B45309] text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 hover:opacity-90 transition-opacity"
+              >
+                <Plus size={14} /> Add User
+              </button>
             </div>
           </div>
           <div className="flex gap-1">
@@ -635,6 +703,139 @@ export default function AdminApp() {
             })}
           </div>
         </nav>
+
+      {/* Add User Modal */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 relative text-left">
+            <button
+              onClick={() => setShowAddUserModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200"
+            >
+              <X size={16} />
+            </button>
+            <h3 className="font-bold text-lg text-[#0F172A] mb-4">Register New User</h3>
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">User Role *</label>
+                <select
+                  value={newUserRole}
+                  onChange={(e: any) => setNewUserRole(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#B45309] outline-none text-gray-700"
+                >
+                  <option value="DRIVER">Driver</option>
+                  <option value="OPERATOR">Operator</option>
+                  <option value="ATTENDANT">Attendant</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. John Doe"
+                  value={newUserName}
+                  onChange={(e) => setNewUserName(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#B45309] outline-none text-[#0F172A]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="e.g. john@example.com"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#B45309] outline-none text-[#0F172A]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Phone Number</label>
+                <input
+                  type="tel"
+                  placeholder="e.g. +256701234567"
+                  value={newUserPhone}
+                  onChange={(e) => setNewUserPhone(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#B45309] outline-none text-[#0F172A]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Password *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Minimum 6 characters"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#B45309] outline-none text-[#0F172A]"
+                />
+              </div>
+
+              {newUserRole === 'OPERATOR' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Company Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Kampala Parking Ltd"
+                      value={newUserCompanyName}
+                      onChange={(e) => setNewUserCompanyName(e.target.value)}
+                      className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#B45309] outline-none text-[#0F172A]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Business License</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. LIC-98765"
+                      value={newUserBusinessLicense}
+                      onChange={(e) => setNewUserBusinessLicense(e.target.value)}
+                      className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#B45309] outline-none text-[#0F172A]"
+                    />
+                  </div>
+                </>
+              )}
+
+              {newUserRole === 'ATTENDANT' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Assign Facility</label>
+                    <select
+                      value={newUserFacilityId}
+                      onChange={(e) => setNewUserFacilityId(e.target.value)}
+                      className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#B45309] outline-none text-gray-700"
+                    >
+                      <option value="">-- Select Facility --</option>
+                      {activeFacilities.map((f: any) => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Shift Info</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 7:00 AM – 3:00 PM"
+                      value={newUserShiftInfo}
+                      onChange={(e) => setNewUserShiftInfo(e.target.value)}
+                      className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#B45309] outline-none text-[#0F172A]"
+                    />
+                  </div>
+                </>
+              )}
+
+              <button
+                type="submit"
+                disabled={createUserLoading}
+                className="w-full mt-4 py-3 bg-[#B45309] text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-amber-800 transition-colors"
+              >
+                {createUserLoading ? 'Creating User...' : 'Create User'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
       </main>
     </div>
   );

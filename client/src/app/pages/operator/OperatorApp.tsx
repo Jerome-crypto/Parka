@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   LayoutDashboard, Building2, Tag, Calendar, BarChart2, LogOut,
-  TrendingUp, Car, DollarSign, Edit, Plus, Check, X,
+  TrendingUp, Car, DollarSign, Edit, Plus, Check, X, Trash2,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -16,6 +16,7 @@ import {
   useOperatorReports,
   useReservations,
   useCreateFacility,
+  useUpdateFacility,
 } from '../../services/queries';
 
 type Screen = 'dashboard' | 'facilities' | 'pricing' | 'reservations' | 'reports';
@@ -51,10 +52,50 @@ export default function OperatorApp() {
   const [rateName, setRateName] = useState('');
   const [rateSchedule, setRateSchedule] = useState('');
   const [rateDiscount, setRateDiscount] = useState('-10%');
-  const [customRates, setCustomRates] = useState<any[]>([]);
+  const [customRates, setCustomRates] = useState<any[]>([
+    { id: '1', name: 'Weekend Rate', schedule: 'Fri 6PM – Mon 6AM', discount: '-15%', status: 'Active' },
+    { id: '2', name: 'Monthly Pass', schedule: 'All facilities', discount: '-30%', status: 'Active' },
+    { id: '3', name: 'Early Bird', schedule: 'Before 8AM', discount: '-20%', status: 'Inactive' },
+  ]);
 
   // Mutations
   const createFacilityMutation = useCreateFacility();
+  const updateFacilityMutation = useUpdateFacility();
+
+  const [showEditFacilityModal, setShowEditFacilityModal] = useState(false);
+  const [selectedEditFacility, setSelectedEditFacility] = useState<any>(null);
+
+  const handleEditFacility = async (e: any) => {
+    e.preventDefault();
+    if (!selectedEditFacility) return;
+    if (!facName || !facAddress) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    try {
+      await updateFacilityMutation.mutateAsync({
+        id: selectedEditFacility.id,
+        data: {
+          name: facName,
+          address: facAddress,
+          latitude: Number(facLat),
+          longitude: Number(facLng),
+          totalSpaces: Number(facSpaces),
+          pricePerHour: Number(facRate),
+          type: facType,
+          hours: facHours,
+          hasSecurity: facAmenities.includes('24/7 Security'),
+          imageUrl: facImageUrl || 'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=800&h=400&fit=crop&auto=format',
+          amenities: facAmenities,
+        },
+      });
+      alert('Facility updated successfully!');
+      setShowEditFacilityModal(false);
+      setSelectedEditFacility(null);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update facility.');
+    }
+  };
 
   const handleAddFacility = async (e: any) => {
     e.preventDefault();
@@ -353,7 +394,23 @@ export default function OperatorApp() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button className="flex-1 py-2 flex items-center justify-center gap-1.5 border border-gray-100 text-gray-700 rounded-lg text-sm">
+                    <button
+                      onClick={() => {
+                        setSelectedEditFacility(f);
+                        setFacName(f.name);
+                        setFacAddress(f.address);
+                        setFacLat(String(f.latitude || f.lat || '0.3150'));
+                        setFacLng(String(f.longitude || f.lng || '32.5820'));
+                        setFacSpaces(Number(f.totalSpaces || f.spaces || 50));
+                        setFacRate(Number(f.pricePerHour || f.rate || 2000));
+                        setFacType(f.type || 'covered');
+                        setFacHours(f.hours || '24/7');
+                        setFacAmenities(f.amenities || ['Covered', '24/7 Security']);
+                        setFacImageUrl(f.imageUrl || f.image || '');
+                        setShowEditFacilityModal(true);
+                      }}
+                      className="flex-1 py-2 flex items-center justify-center gap-1.5 border border-gray-100 text-gray-700 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+                    >
                       <Edit size={14} /> Edit
                     </button>
                   </div>
@@ -384,7 +441,23 @@ export default function OperatorApp() {
               <div key={f.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <p className="font-semibold text-[#0F172A]">{f.name}</p>
-                  <button className="text-[#7C3AED] text-sm font-medium flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      setSelectedEditFacility(f);
+                      setFacName(f.name);
+                      setFacAddress(f.address);
+                      setFacLat(String(f.latitude || f.lat || '0.3150'));
+                      setFacLng(String(f.longitude || f.lng || '32.5820'));
+                      setFacSpaces(Number(f.totalSpaces || f.spaces || 50));
+                      setFacRate(Number(f.pricePerHour || f.rate || 2000));
+                      setFacType(f.type || 'covered');
+                      setFacHours(f.hours || '24/7');
+                      setFacAmenities(f.amenities || ['Covered', '24/7 Security']);
+                      setFacImageUrl(f.imageUrl || f.image || '');
+                      setShowEditFacilityModal(true);
+                    }}
+                    className="text-[#7C3AED] text-sm font-medium flex items-center gap-1 hover:opacity-80 transition-opacity"
+                  >
                     <Edit size={14} /> Edit
                   </button>
                 </div>
@@ -421,27 +494,28 @@ export default function OperatorApp() {
                 <Plus size={14} /> Add
               </button>
             </div>
-            {[
-              { label: 'Weekend Rate', sub: 'Fri 6PM – Mon 6AM', discount: '-15%', status: 'Active' },
-              { label: 'Monthly Pass', sub: 'All facilities', discount: '-30%', status: 'Active' },
-              { label: 'Early Bird', sub: 'Before 8AM', discount: '-20%', status: 'Inactive' },
-              ...customRates.map((cr) => ({
-                label: cr.name,
-                sub: cr.schedule,
-                discount: cr.discount,
-                status: 'Active',
-              }))
-            ].map((sr) => (
-              <div key={sr.label + sr.sub} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
+            {customRates.map((sr) => (
+              <div key={sr.id} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
                 <div>
-                  <p className="text-sm font-medium text-[#0F172A]">{sr.label}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{sr.sub}</p>
+                  <p className="text-sm font-medium text-[#0F172A]">{sr.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{sr.schedule}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <span className="text-sm font-bold text-[#2E8B57]">{sr.discount}</span>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sr.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                     {sr.status}
                   </span>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Are you sure you want to delete the special rate "${sr.name}"?`)) {
+                        setCustomRates((prev) => prev.filter((r) => r.id !== sr.id));
+                      }
+                    }}
+                    className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                    title="Delete rate"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             ))}
@@ -895,7 +969,7 @@ export default function OperatorApp() {
                 if (!rateName || !rateSchedule) return;
                 setCustomRates((prev) => [
                   ...prev,
-                  { name: rateName, schedule: rateSchedule, discount: rateDiscount }
+                  { id: Date.now().toString(), name: rateName, schedule: rateSchedule, discount: rateDiscount, status: 'Active' }
                 ]);
                 setRateName('');
                 setRateSchedule('');
@@ -945,6 +1019,157 @@ export default function OperatorApp() {
                 className="w-full py-3 bg-[#7C3AED] text-white font-semibold text-sm rounded-xl hover:bg-purple-700 transition-colors"
               >
                 Create Rate
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Facility Modal */}
+      {showEditFacilityModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 relative animate-fade-in text-left">
+            <button
+              onClick={() => {
+                setShowEditFacilityModal(false);
+                setSelectedEditFacility(null);
+              }}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200"
+            >
+              <X size={16} />
+            </button>
+            <h3 className="font-bold text-lg text-[#0F172A] mb-4">Edit Facility Details</h3>
+            <form onSubmit={handleEditFacility} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Facility Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Acacia Mall Annex"
+                  required
+                  value={facName}
+                  onChange={(e) => setFacName(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Address *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Cooper Rd, Kampala"
+                  required
+                  value={facAddress}
+                  onChange={(e) => setFacAddress(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Latitude</label>
+                  <input
+                    type="text"
+                    required
+                    value={facLat}
+                    onChange={(e) => setFacLat(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Longitude</label>
+                  <input
+                    type="text"
+                    required
+                    value={facLng}
+                    onChange={(e) => setFacLng(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Total Spaces</label>
+                  <input
+                    type="number"
+                    required
+                    value={facSpaces}
+                    onChange={(e) => setFacSpaces(Number(e.target.value))}
+                    className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Price Per Hour (UGX)</label>
+                  <input
+                    type="number"
+                    required
+                    value={facRate}
+                    onChange={(e) => setFacRate(Number(e.target.value))}
+                    className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Facility Type</label>
+                  <select
+                    value={facType}
+                    onChange={(e: any) => setFacType(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-gray-700"
+                  >
+                    <option value="covered">Covered</option>
+                    <option value="open">Open</option>
+                    <option value="multi-story">Multi-story</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Hours</label>
+                  <input
+                    type="text"
+                    required
+                    value={facHours}
+                    onChange={(e) => setFacHours(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Image URL</label>
+                <input
+                  type="text"
+                  placeholder="Leave blank for default"
+                  value={facImageUrl}
+                  onChange={(e) => setFacImageUrl(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Amenities</label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {['Covered', '24/7 Security', 'CCTV', 'Disabled Access', 'EV Charging'].map((amenity) => {
+                    const active = facAmenities.includes(amenity);
+                    return (
+                      <button
+                        type="button"
+                        key={amenity}
+                        onClick={() => {
+                          setFacAmenities((prev) =>
+                            active ? prev.filter((a) => a !== amenity) : [...prev, amenity]
+                          );
+                        }}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                          active ? 'bg-purple-100 text-[#7C3AED] border-purple-200' : 'bg-white border-gray-150 text-gray-500'
+                        }`}
+                      >
+                        {amenity}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={updateFacilityMutation.isPending}
+                className="w-full mt-4 py-3 bg-[#7C3AED] text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-purple-700 transition-colors"
+              >
+                {updateFacilityMutation.isPending ? 'Updating...' : 'Save Updates'}
               </button>
             </form>
           </div>

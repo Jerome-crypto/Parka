@@ -55,10 +55,10 @@ export default function Register() {
       await register(payload);
 
       // Auto-route based on registration role
-      if (role === 'DRIVER') navigate('/driver');
-      else if (role === 'ATTENDANT') navigate('/attendant');
-      else if (role === 'OPERATOR') navigate('/operator');
-      else navigate('/');
+      if (role === 'DRIVER') navigate('/driver', { replace: true });
+      else if (role === 'ATTENDANT') navigate('/attendant', { replace: true });
+      else if (role === 'OPERATOR') navigate('/operator', { replace: true });
+      else navigate('/', { replace: true });
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message || 'Registration failed.');
