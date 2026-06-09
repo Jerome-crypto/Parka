@@ -33,4 +33,28 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  build: {
+    // Fixes "Cannot access 'X' before initialization" TDZ errors caused by
+    // Rollup chunk ordering in production. Manual chunks enforce stable
+    // module initialization order.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Core React runtime
+          'vendor-react': ['react', 'react-dom', 'react-router'],
+          // Data fetching and state
+          'vendor-query': ['@tanstack/react-query'],
+          // Charts
+          'vendor-charts': ['recharts'],
+          // Socket.io client
+          'vendor-socket': ['socket.io-client'],
+          // QR scanning
+          'vendor-qr': ['html5-qrcode'],
+          // Icons
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
+  },
 })

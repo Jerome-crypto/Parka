@@ -121,6 +121,8 @@ export default function AdminApp() {
   const { data: auditLogsData, isLoading: auditLoading, refetch: refetchAudit } = useAuditLogs();
   const { data: sessionsData, isLoading: sessionsLoading, refetch: refetchSessions } = useSessions();
 
+  const activeFacilities = facilitiesData?.active || [];
+
   // Mutations
   const toggleUserStatusMutation = useToggleUserStatus();
   const approveFacilityMutation = useApproveFacility();
@@ -185,7 +187,6 @@ export default function AdminApp() {
     const totalUsers = drivers.length + operators.length + attendants.length;
 
     const pendingFacilities = facilitiesData?.pending || [];
-    const activeFacilities = facilitiesData?.active || [];
 
     const activeSessionsCount = (sessionsData || []).filter((s: any) => s.status === 'active').length;
 
