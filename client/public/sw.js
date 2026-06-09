@@ -1,4 +1,4 @@
-const CACHE_NAME = 'parka-v1';
+const CACHE_NAME = 'parka-v2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -41,7 +41,33 @@ self.addEventListener('fetch', (event) => {
   ) {
     return;
   }
+
+  // Network-First strategy for index.html / navigate requests to prevent serving stale index.html
+  const isNavigate = event.request.mode === 'navigate' || 
+                     requestUrl.pathname === '/' || 
+                     requestUrl.pathname === '/index.html';
+
+  if (isNavigate) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // If offline, fall back to cached index.html
+          return caches.match('/index.html') || caches.match('/');
+        })
+    );
+    return;
+  }
   
+  // Cache-First strategy for static assets
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -61,10 +87,6 @@ self.addEventListener('fetch', (event) => {
         }
         return networkResponse;
       }).catch(() => {
-        // For offline page navigations in SPA, return index.html shell
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
-        }
         return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
       });
     })
