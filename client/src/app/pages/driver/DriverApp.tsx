@@ -165,8 +165,7 @@ export default function DriverApp() {
   const checkoutMutation = useCheckoutSession();
   const createTicketMutation = useCreateTicket();
 
-  const { data: dbReviews = [], isLoading: isLoadingReviews } = useFacilityReviews(selectedFacility?.id || '');
-  const createReviewMutation = useCreateReview();
+  // NOTE: useFacilityReviews is called after selectedFacility state is declared (see below) to avoid TDZ errors.
 
   // Review submission state
   const [newRating, setNewRating] = useState(5);
@@ -261,6 +260,11 @@ export default function DriverApp() {
     const fid = searchParams.get('facilityId');
     return fid ? (dbFacilities.find((f: any) => f.id === fid) || null) : null;
   });
+
+  // These hooks must come AFTER selectedFacility state is declared to avoid TDZ errors
+  const { data: dbReviews = [], isLoading: isLoadingReviews } = useFacilityReviews(selectedFacility?.id || '');
+  const createReviewMutation = useCreateReview();
+
   const [reserveStep, setReserveStep] = useState(1);
   const [reserveVehicle, setReserveVehicle] = useState('');
   const [reserveDate, setReserveDate] = useState(() => {
