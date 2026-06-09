@@ -35,24 +35,42 @@ export default defineConfig({
   assetsInclude: ['**/*.svg', '**/*.csv'],
 
   build: {
-    // Fixes "Cannot access 'X' before initialization" TDZ errors caused by
-    // Rollup chunk ordering in production. Manual chunks enforce stable
-    // module initialization order.
+    // Fixes "Cannot access 'X' before initialization" TDZ errors.
+    // recharts deeply depends on React hooks/internals so they MUST be in
+    // the same chunk. A function-based manualChunks handles all transitive
+    // deps correctly (unlike a static object which can split shared deps).
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Core React runtime
-          'vendor-react': ['react', 'react-dom', 'react-router'],
-          // Data fetching and state
-          'vendor-query': ['@tanstack/react-query'],
-          // Charts
-          'vendor-charts': ['recharts'],
-          // Socket.io client
-          'vendor-socket': ['socket.io-client'],
-          // QR scanning
-          'vendor-qr': ['html5-qrcode'],
+        manualChunks(id) {
+          // recharts must live with React – it uses React hooks at module
+          // evaluation time, so splitting them causes TDZ crashes.
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/react-router') ||
+            id.includes('node_modules/recharts') ||
+            id.includes('node_modules/d3-') ||
+            id.includes('node_modules/victory-') ||
+            id.includes('node_modules/scheduler/')
+          ) {
+            return 'vendor-react';
+          }
+          // Data fetching
+          if (id.includes('node_modules/@tanstack/')) {
+            return 'vendor-query';
+          }
+          // Socket.io
+          if (id.includes('node_modules/socket.io-client') || id.includes('node_modules/engine.io-client')) {
+            return 'vendor-socket';
+          }
+          // QR scanning (large – isolated to avoid polluting main chunk)
+          if (id.includes('node_modules/html5-qrcode')) {
+            return 'vendor-qr';
+          }
           // Icons
-          'vendor-icons': ['lucide-react'],
+          if (id.includes('node_modules/lucide-react')) {
+            return 'vendor-icons';
+          }
         },
       },
     },
