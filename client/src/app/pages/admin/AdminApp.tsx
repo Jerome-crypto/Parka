@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import {
   LayoutDashboard, Users, Building2, Shield, Activity, LogOut,
   Car, DollarSign, Check, X, AlertCircle,
-  MoreVertical, Search,
+  MoreVertical, Search, Plus,
 } from 'lucide-react';
 import {
   AreaChart, Area, LineChart, Line,
