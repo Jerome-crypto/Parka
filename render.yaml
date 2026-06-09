@@ -7,7 +7,6 @@ services:
     rootDir: server
     buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
-    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
