@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactElement } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   Home, Search, Bell, User, MapPin, Clock, Star, Shield, ChevronRight,
   Navigation, Zap, Filter, List, Map, ArrowLeft, Car, Calendar,
@@ -249,9 +249,18 @@ export default function DriverApp() {
   const RESERVATIONS = dbReservations;
   const NOTIFICATIONS = dbNotifications;
 
-  const [activeTab, setActiveTab] = useState<Tab>('home');
-  const [screen, setScreen] = useState<Screen>('home');
-  const [selectedFacility, setSelectedFacility] = useState<ParkingFacility | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const s = searchParams.get('screen') as Tab;
+    return ['home', 'explore', 'reservations', 'notifications', 'profile'].includes(s) ? s : 'home';
+  });
+  const [screen, setScreenState] = useState<Screen>(() => {
+    return (searchParams.get('screen') as Screen) || 'home';
+  });
+  const [selectedFacility, setSelectedFacilityState] = useState<ParkingFacility | null>(() => {
+    const fid = searchParams.get('facilityId');
+    return fid ? (dbFacilities.find((f: any) => f.id === fid) || null) : null;
+  });
   const [reserveStep, setReserveStep] = useState(1);
   const [reserveVehicle, setReserveVehicle] = useState('');
   const [reserveDate, setReserveDate] = useState(() => {
@@ -260,7 +269,81 @@ export default function DriverApp() {
   });
   const [reserveTime, setReserveTime] = useState('10:30 AM');
   const [reserveDuration, setReserveDuration] = useState(2);
-  const [confirmedResId, setConfirmedResId] = useState('');
+  const [confirmedResId, setConfirmedResIdState] = useState(() => {
+    return searchParams.get('confirmedResId') || '';
+  });
+
+  // Sync state FROM URL search parameters (handles browser/hardware back button navigations)
+  useEffect(() => {
+    const paramScreen = (searchParams.get('screen') as Screen) || 'home';
+    if (paramScreen !== screen) {
+      setScreenState(paramScreen);
+      if (['home', 'explore', 'reservations', 'notifications', 'profile'].includes(paramScreen)) {
+        setActiveTab(paramScreen as Tab);
+      }
+    }
+
+    const fid = searchParams.get('facilityId');
+    if (fid) {
+      const found = dbFacilities.find((f: any) => f.id === fid) || null;
+      if (found && (!selectedFacility || selectedFacility.id !== fid)) {
+        setSelectedFacilityState(found);
+      }
+    } else if (selectedFacility && ['home', 'explore', 'reservations', 'notifications', 'profile'].includes(paramScreen)) {
+      setSelectedFacilityState(null);
+    }
+
+    const paramResId = searchParams.get('confirmedResId') || '';
+    if (paramResId !== confirmedResId) {
+      setConfirmedResIdState(paramResId);
+    }
+  }, [searchParams, dbFacilities]);
+
+  // Navigate to screen and push/replace URL search parameters
+  const navigateTo = (newScreen: Screen, extra: { facilityId?: string; confirmedResId?: string } = {}) => {
+    const nextParams: Record<string, string> = { screen: newScreen };
+
+    const fid = extra.facilityId || (['detail', 'reserve', 'confirmed', 'checkout', 'receipt'].includes(newScreen) ? (selectedFacility?.id || searchParams.get('facilityId') || undefined) : undefined);
+    if (fid) {
+      nextParams.facilityId = fid;
+    }
+
+    const rid = extra.confirmedResId || (['confirmed', 'receipt'].includes(newScreen) ? (confirmedResId || searchParams.get('confirmedResId') || undefined) : undefined);
+    if (rid) {
+      nextParams.confirmedResId = rid;
+    }
+
+    // Tabs use replace: true to prevent back button stack bloating; other screens push new history entries
+    const isTab = ['home', 'explore', 'reservations', 'notifications', 'profile'].includes(newScreen);
+    setSearchParams(nextParams, { replace: isTab });
+  };
+
+  const setScreen = (s: Screen) => navigateTo(s);
+  const push = (s: Screen) => navigateTo(s);
+
+  const setSelectedFacility = (f: ParkingFacility | null) => {
+    setSelectedFacilityState(f);
+    const currentScreen = (searchParams.get('screen') as Screen) || 'home';
+    if (f && ['detail', 'reserve', 'confirmed', 'checkout', 'receipt'].includes(currentScreen)) {
+      setSearchParams({
+        screen: currentScreen,
+        facilityId: f.id,
+        ...(confirmedResId ? { confirmedResId } : {})
+      }, { replace: true });
+    }
+  };
+
+  const setConfirmedResId = (id: string) => {
+    setConfirmedResIdState(id);
+    const currentScreen = (searchParams.get('screen') as Screen) || 'home';
+    if (id && ['confirmed', 'receipt'].includes(currentScreen)) {
+      setSearchParams({
+        screen: currentScreen,
+        ...(selectedFacility ? { facilityId: selectedFacility.id } : {}),
+        confirmedResId: id
+      }, { replace: true });
+    }
+  };
 
   // Support Ticket Form States
   const [showSupportModal, setShowSupportModal] = useState(false);
@@ -342,7 +425,6 @@ export default function DriverApp() {
   const elapsedHours = Math.max(1, Math.ceil(sessionSeconds / 3600));
   const sessionCharges = activeSession ? (elapsedHours * hourlyRate) : 0;
 
-  const push = (s: Screen) => setScreen(s);
   const changeTab = (t: Tab) => {
     setActiveTab(t);
     setScreen(t as Screen);

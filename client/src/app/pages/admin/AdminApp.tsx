@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   LayoutDashboard, Users, Building2, Shield, Activity, LogOut,
   Car, DollarSign, Check, X, AlertCircle,
@@ -46,7 +46,21 @@ const activityData = [
 export default function AdminApp() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [screen, setScreen] = useState<Screen>('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [screen, setScreenState] = useState<Screen>(() => {
+    return (searchParams.get('screen') as Screen) || 'dashboard';
+  });
+
+  useEffect(() => {
+    const paramScreen = (searchParams.get('screen') as Screen) || 'dashboard';
+    if (paramScreen !== screen) {
+      setScreenState(paramScreen);
+    }
+  }, [searchParams, screen]);
+
+  const setScreen = (s: Screen) => {
+    setSearchParams({ screen: s });
+  };
   const [userTab, setUserTab] = useState<UserTab>('drivers');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeUserMenu, setActiveUserMenu] = useState<string | null>(null);

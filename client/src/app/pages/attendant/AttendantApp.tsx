@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   ScanLine, LayoutDashboard, Car, LogOut, Check, X,
   Clock, User, MapPin, AlertCircle, Camera, Computer,
@@ -20,7 +20,21 @@ type Screen = 'dashboard' | 'scanner' | 'sessions';
 export default function AttendantApp() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [screen, setScreen] = useState<Screen>('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [screen, setScreenState] = useState<Screen>(() => {
+    return (searchParams.get('screen') as Screen) || 'dashboard';
+  });
+
+  useEffect(() => {
+    const paramScreen = (searchParams.get('screen') as Screen) || 'dashboard';
+    if (paramScreen !== screen) {
+      setScreenState(paramScreen);
+    }
+  }, [searchParams, screen]);
+
+  const setScreen = (s: Screen) => {
+    setSearchParams({ screen: s });
+  };
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'success' | 'failure'>('idle');
   const [scanResult, setScanResult] = useState<{
     plate: string;
