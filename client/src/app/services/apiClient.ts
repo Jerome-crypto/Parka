@@ -4,12 +4,31 @@ const API_URL = import.meta.env.VITE_API_URL
   ? (import.meta.env.VITE_API_URL.endsWith('/api') ? import.meta.env.VITE_API_URL : `${import.meta.env.VITE_API_URL}/api`)
   : 'http://localhost:5000/api';
 
+// Derive the base server URL (without /api) for health checks
+const SERVER_BASE_URL = API_URL.replace(/\/api$/, '');
+
 export const apiClient = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+/**
+ * Pings the server's /health endpoint to wake it up from Render's
+ * free-tier spin-down. Must be called as early as possible when the
+ * app loads so the server is warm before the user tries to log in.
+ * Uses native fetch (not axios) to avoid triggering auth interceptors.
+ */
+export const wakeUpServer = () => {
+  fetch(`${SERVER_BASE_URL}/health`, { method: 'GET', mode: 'cors' })
+    .catch(() => {
+      // Silently retry once after 5 seconds in case the server is still booting
+      setTimeout(() => {
+        fetch(`${SERVER_BASE_URL}/health`, { method: 'GET', mode: 'cors' }).catch(() => {});
+      }, 5000);
+    });
+};
 
 // Inject Access Token to every request
 apiClient.interceptors.request.use(
