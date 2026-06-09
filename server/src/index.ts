@@ -146,6 +146,22 @@ const startServer = async () => {
 
     server.listen(env.PORT, () => {
       logger.info(`🚀 Parka server successfully started on port ${env.PORT} in ${env.NODE_ENV} mode.`);
+
+      // ── KEEPALIVE: prevent Render free-tier from spinning down ────────────
+      // Render free tier sleeps after 15 min of inactivity.
+      // Pinging /health every 4 min keeps the process alive.
+      // Only runs in production so local dev is unaffected.
+      if (env.NODE_ENV === 'production') {
+        const https = require('https');
+        const SELF_URL = `https://parka-server.onrender.com/health`;
+        setInterval(() => {
+          https.get(SELF_URL, (res: { statusCode: number }) => {
+            logger.info(`[keepalive] /health → ${res.statusCode}`);
+          }).on('error', (err: Error) => {
+            logger.warn(`[keepalive] ping failed: ${err.message}`);
+          });
+        }, 4 * 60 * 1000); // every 4 minutes
+      }
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
