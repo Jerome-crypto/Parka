@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import { env } from './env';
 
-const isProduction = env.NODE_ENV === 'production';
+const isProduction = env.NODE_ENV === 'production' || env.DATABASE_URL.includes('render.com');
 
 // Use DATABASE_URL for connection, but fall back to individual variables
 export const pool = new Pool({

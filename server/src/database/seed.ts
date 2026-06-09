@@ -367,7 +367,8 @@ export const seedDatabase = async (force = false) => {
 
 // Run if called directly
 if (require.main === module) {
-  seedDatabase()
+  const force = process.argv.includes('--force') || process.argv.includes('-f');
+  seedDatabase(force)
     .then(() => {
       logger.info('Seeding process finished.');
       process.exit(0);
