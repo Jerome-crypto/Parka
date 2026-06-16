@@ -224,10 +224,24 @@ export default function OperatorApp() {
                 {facilitiesData?.length || 0} Managed Parking Facilities
               </p>
             </div>
-            <div className="w-12 h-12 rounded-full bg-[#F4B400] flex items-center justify-center">
-              <span className="font-bold text-[#0F172A]">
-                {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase() : 'OP'}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-[#F4B400] flex items-center justify-center">
+                <span className="font-bold text-[#0F172A]">
+                  {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase() : 'OP'}
+                </span>
+              </div>
+              <button
+                onClick={async () => {
+                  if (confirm('Are you sure you want to sign out?')) {
+                    await logout();
+                    navigate('/');
+                  }
+                }}
+                className="md:hidden p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={18} />
+              </button>
             </div>
           </div>
         </div>
@@ -351,12 +365,26 @@ export default function OperatorApp() {
               <h2 className="font-bold text-lg text-[#0F172A]">Facilities</h2>
               <p className="text-sm text-gray-500 mt-0.5">{facilities.length} managed facilities</p>
             </div>
-            <button
-              onClick={() => setShowAddFacilityModal(true)}
-              className="flex items-center gap-1.5 bg-[#7C3AED] text-white px-3 py-2 rounded-xl text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              <Plus size={16} /> Add
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAddFacilityModal(true)}
+                className="bg-[#7C3AED] text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 hover:opacity-90 transition-opacity"
+              >
+                <Plus size={14} /> Add Facility
+              </button>
+              <button
+                onClick={async () => {
+                  if (confirm('Are you sure you want to sign out?')) {
+                    await logout();
+                    navigate('/');
+                  }
+                }}
+                className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -442,9 +470,23 @@ export default function OperatorApp() {
 
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="bg-white border-b border-gray-100 px-5 pt-8 pb-4">
-          <h2 className="font-bold text-lg text-[#0F172A]">Pricing Management</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Configure rates across facilities</p>
+        <div className="bg-white border-b border-gray-100 px-5 pt-8 pb-4 flex justify-between items-center">
+          <div>
+            <h2 className="font-bold text-lg text-[#0F172A]">Pricing Management</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Configure rates across facilities</p>
+          </div>
+          <button
+            onClick={async () => {
+              if (confirm('Are you sure you want to sign out?')) {
+                await logout();
+                navigate('/');
+              }
+            }}
+            className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+            title="Sign Out"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
 
         <div className="px-5 py-5 space-y-4">
@@ -559,9 +601,23 @@ export default function OperatorApp() {
 
     return (
       <div className="flex-1 overflow-y-auto">
-        <div className="bg-white border-b border-gray-100 px-5 pt-8 pb-4">
-          <h2 className="font-bold text-lg text-[#0F172A]">Reservations</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Booking overview</p>
+        <div className="bg-white border-b border-gray-100 px-5 pt-8 pb-4 flex justify-between items-center">
+          <div>
+            <h2 className="font-bold text-lg text-[#0F172A]">Reservations</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Booking overview</p>
+          </div>
+          <button
+            onClick={async () => {
+              if (confirm('Are you sure you want to sign out?')) {
+                await logout();
+                navigate('/');
+              }
+            }}
+            className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+            title="Sign Out"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
         <div className="px-5 py-4 space-y-3">
           {reservations.length === 0 ? (
@@ -638,12 +694,26 @@ export default function OperatorApp() {
               <h2 className="font-bold text-lg text-[#0F172A]">Reports</h2>
               <p className="text-sm text-gray-500 mt-0.5">Performance analytics</p>
             </div>
-            <button
-              onClick={handleExportReports}
-              className="flex items-center gap-1.5 border border-gray-200 text-gray-700 px-3 py-2 rounded-xl text-sm hover:bg-slate-50 transition-colors"
-            >
-              Export
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportReports}
+                className="flex items-center gap-1.5 border border-gray-200 text-gray-700 px-3 py-2 rounded-xl text-sm hover:bg-slate-50 transition-colors"
+              >
+                Export
+              </button>
+              <button
+                onClick={async () => {
+                  if (confirm('Are you sure you want to sign out?')) {
+                    await logout();
+                    navigate('/');
+                  }
+                }}
+                className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
         </div>
 

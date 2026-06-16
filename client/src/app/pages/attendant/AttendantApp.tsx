@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   ScanLine, LayoutDashboard, Car, LogOut, Check, X,
@@ -21,6 +21,7 @@ export default function AttendantApp() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const [screen, setScreenState] = useState<Screen>(() => {
     return (searchParams.get('screen') as Screen) || 'dashboard';
   });
@@ -93,6 +94,25 @@ export default function AttendantApp() {
           id: resData.id,
         });
         setScanState('success');
+
+        // Automatically trigger check-in
+        checkinMutation.mutate(resData.id, {
+          onSuccess: () => {
+            setTimeout(() => {
+              setScanState('idle');
+              setScanResult(null);
+              setSelectedSimReservation(null);
+              refetchSessions();
+              refetchAvailability();
+              refetchReservations();
+              setScreen('sessions');
+            }, 1000);
+          },
+          onError: (err: any) => {
+            setScanError(err?.response?.data?.message || 'Check-in failed');
+            setScanState('failure');
+          },
+        });
       },
       onError: (err: any) => {
         setScanError(err?.response?.data?.message || 'Invalid or expired QR code.');
@@ -103,17 +123,33 @@ export default function AttendantApp() {
 
   // Unified camera scanner instance lifecycle hook
   useEffect(() => {
-    let html5QrCode: Html5Qrcode | null = null;
     let isMounted = true;
+    const shouldStartScanner = useCamera && screen === 'scanner' && scanState === 'idle';
 
-    if (useCamera && screen === 'scanner' && scanState === 'idle') {
-      const timer = setTimeout(() => {
+    if (shouldStartScanner) {
+      const timer = setTimeout(async () => {
         try {
           const element = document.getElementById("reader");
           if (!element || !isMounted) return;
 
-          html5QrCode = new Html5Qrcode("reader");
-          html5QrCode.start(
+          // Cleanup any existing instance on the DOM
+          if (scannerRef.current) {
+            try {
+              if (scannerRef.current.isScanning) {
+                await scannerRef.current.stop();
+              }
+            } catch (stopErr) {
+              console.warn("Stopping existing scanner failed:", stopErr);
+            }
+            scannerRef.current = null;
+          }
+
+          if (!isMounted) return;
+
+          const html5QrCode = new Html5Qrcode("reader");
+          scannerRef.current = html5QrCode;
+
+          await html5QrCode.start(
             { facingMode: "environment" },
             {
               fps: 10,
@@ -123,7 +159,7 @@ export default function AttendantApp() {
               }
             },
             async (decodedText) => {
-              if (html5QrCode && html5QrCode.isScanning) {
+              if (html5QrCode.isScanning) {
                 try {
                   await html5QrCode.stop();
                 } catch (stopErr) {
@@ -137,17 +173,11 @@ export default function AttendantApp() {
             () => {
               // Fail silently on scan loops (quiet mode)
             }
-          ).catch((err) => {
-            console.error("Camera start failure:", err);
-            if (isMounted) {
-              setScanError("Camera access denied or busy: " + (err.message || err));
-              setScanState('failure');
-            }
-          });
+          );
         } catch (e: any) {
           console.error("Scanner setup error:", e);
           if (isMounted) {
-            setScanError("Failed to configure QR scanner: " + e.message);
+            setScanError("Camera access denied or busy: " + (e.message || e));
             setScanState('failure');
           }
         }
@@ -156,12 +186,19 @@ export default function AttendantApp() {
       return () => {
         isMounted = false;
         clearTimeout(timer);
-        if (html5QrCode) {
-          if (html5QrCode.isScanning) {
-            html5QrCode.stop().catch(err => console.error("Scanner stop cleanup failure:", err));
+        const currentScanner = scannerRef.current;
+        if (currentScanner) {
+          if (currentScanner.isScanning) {
+            currentScanner.stop().catch(err => console.error("Scanner stop cleanup failure:", err));
           }
         }
       };
+    } else {
+      // Ensure running scanner is stopped when not on active scanning tab/state
+      const currentScanner = scannerRef.current;
+      if (currentScanner && currentScanner.isScanning) {
+        currentScanner.stop().catch(err => console.error("Scanner stop inactive cleanup failure:", err));
+      }
     }
   }, [useCamera, screen, scanState]);
 
@@ -244,12 +281,26 @@ export default function AttendantApp() {
 
     return (
       <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
-        <div className="bg-[#2E8B57] px-5 pt-12 pb-6 text-white">
-          <p className="text-green-200 text-sm mb-1">Welcome back,</p>
-          <h1 className="text-xl font-bold">{user?.name || 'Attendant'}</h1>
-          <p className="text-green-200 text-sm mt-1 flex items-center gap-1.5">
-            <MapPin size={13} /> {user?.facilityName || 'Garden City Parking'} · Shift: {user?.shiftInfo || '7:00 AM – 3:00 PM'}
-          </p>
+        <div className="bg-[#2E8B57] px-5 pt-12 pb-6 text-white flex justify-between items-start">
+          <div>
+            <p className="text-green-200 text-sm mb-1">Welcome back,</p>
+            <h1 className="text-xl font-bold">{user?.name || 'Attendant'}</h1>
+            <p className="text-green-200 text-sm mt-1 flex items-center gap-1.5">
+              <MapPin size={13} /> {user?.facilityName || 'Garden City Parking'} · Shift: {user?.shiftInfo || '7:00 AM – 3:00 PM'}
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              if (confirm('Are you sure you want to sign out?')) {
+                await logout();
+                navigate('/');
+              }
+            }}
+            className="md:hidden p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
+            title="Sign Out"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
 
         <div className="px-4 py-5 space-y-5">
@@ -339,9 +390,23 @@ export default function AttendantApp() {
 
     return (
       <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
-        <div className="bg-white border-b border-gray-100 px-4 pt-12 pb-4">
-          <h2 className="font-bold text-lg text-[#0F172A]">QR Scanner</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Scan driver's reservation QR code</p>
+        <div className="bg-white border-b border-gray-100 px-4 pt-12 pb-4 flex justify-between items-center">
+          <div>
+            <h2 className="font-bold text-lg text-[#0F172A]">QR Scanner</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Scan driver's reservation QR code</p>
+          </div>
+          <button
+            onClick={async () => {
+              if (confirm('Are you sure you want to sign out?')) {
+                await logout();
+                navigate('/');
+              }
+            }}
+            className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+            title="Sign Out"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
 
         {/* Dual Scanner Tabs Interface */}
@@ -521,9 +586,23 @@ export default function AttendantApp() {
 
     return (
       <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
-        <div className="bg-white border-b border-gray-100 px-4 pt-12 pb-4">
-          <h2 className="font-bold text-lg text-[#0F172A]">Active Vehicles</h2>
-          <p className="text-sm text-gray-500 mt-0.5">{activeSessions.length} vehicles currently parked</p>
+        <div className="bg-white border-b border-gray-100 px-4 pt-12 pb-4 flex justify-between items-center">
+          <div>
+            <h2 className="font-bold text-lg text-[#0F172A]">Active Vehicles</h2>
+            <p className="text-sm text-gray-500 mt-0.5">{activeSessions.length} vehicles currently parked</p>
+          </div>
+          <button
+            onClick={async () => {
+              if (confirm('Are you sure you want to sign out?')) {
+                await logout();
+                navigate('/');
+              }
+            }}
+            className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+            title="Sign Out"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
 
         <div className="px-4 py-4 space-y-3">

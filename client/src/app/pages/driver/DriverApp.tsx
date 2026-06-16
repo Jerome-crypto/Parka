@@ -269,8 +269,20 @@ export default function DriverApp() {
   const [reserveVehicle, setReserveVehicle] = useState('');
   const [reserveDate, setReserveDate] = useState(() => {
     const d = new Date();
-    return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    return d.toISOString().split('T')[0]; // "YYYY-MM-DD"
   });
+
+  const formatDateDisplay = (dateStr: string) => {
+    try {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const d = new Date(year, month - 1, day);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const [reserveTime, setReserveTime] = useState('10:30 AM');
   const [reserveDuration, setReserveDuration] = useState(2);
   const [confirmedResId, setConfirmedResIdState] = useState(() => {
@@ -1165,7 +1177,7 @@ export default function DriverApp() {
                   onClick={() => setShowDatePickerModal(true)}
                   className="bg-white border border-gray-100 rounded-xl p-4 text-center cursor-pointer hover:bg-slate-55 transition-colors"
                 >
-                  <p className="font-semibold text-[#0F4C81] text-lg">{reserveDate}</p>
+                  <p className="font-semibold text-[#0F4C81] text-lg">{formatDateDisplay(reserveDate)}</p>
                   <p className="text-sm text-gray-400 mt-1">Tap to change date</p>
                 </div>
               </div>
@@ -1217,7 +1229,7 @@ export default function DriverApp() {
                     { label: 'Facility', value: f.name },
                     { label: 'Address', value: f.address },
                     { label: 'Vehicle', value: USER_VEHICLES.find(v => v.id === reserveVehicle)?.plate || '' },
-                    { label: 'Date', value: reserveDate },
+                    { label: 'Date', value: formatDateDisplay(reserveDate) },
                     { label: 'Arrival', value: reserveTime },
                     { label: 'Duration', value: `${reserveDuration} hour${reserveDuration > 1 ? 's' : ''}` },
                   ].map((item) => (
@@ -1253,14 +1265,18 @@ export default function DriverApp() {
           )}
           <button
             onClick={async () => {
+              if (reserveStep === 1) {
+                if (!reserveVehicle) {
+                  alert('Please select or register a vehicle to continue.');
+                  return;
+                }
+              }
               if (reserveStep < 4) {
                 setReserveStep((s) => s + 1);
               } else {
                 try {
-                  const arrivalDateTime = new Date(reserveDate);
-                  if (isNaN(arrivalDateTime.getTime())) {
-                    arrivalDateTime.setTime(new Date().getTime());
-                  }
+                  const [year, month, day] = reserveDate.split('-').map(Number);
+                  const arrivalDateTime = new Date(year, month - 1, day);
                   const [time, modifier] = reserveTime.split(' ');
                   let [hours, minutes] = time.split(':').map(Number);
                   if (modifier === 'PM' && hours < 12) hours += 12;
@@ -1322,7 +1338,7 @@ export default function DriverApp() {
         <div className="w-full mt-5 space-y-2">
           {[
             { icon: MapPin, label: selectedFacility?.name || '', color: '#0F4C81' },
-            { icon: Calendar, label: reserveDate, color: '#7C3AED' },
+            { icon: Calendar, label: formatDateDisplay(reserveDate), color: '#7C3AED' },
             { icon: Clock, label: `${reserveTime} · ${reserveDuration}h`, color: '#2E8B57' },
             { icon: Car, label: USER_VEHICLES.find(v => v.id === reserveVehicle)?.plate || '', color: '#B45309' },
           ].map((item) => (
@@ -2156,22 +2172,23 @@ export default function DriverApp() {
               {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
                 const d = new Date();
                 d.setDate(d.getDate() + offset);
+                const isoDate = d.toISOString().split('T')[0];
                 const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
                 return (
                   <button
                     key={offset}
                     onClick={() => {
-                      setReserveDate(dayLabel);
+                      setReserveDate(isoDate);
                       setShowDatePickerModal(false);
                     }}
                     className={`p-3 rounded-xl border text-sm font-semibold text-left transition-colors flex items-center justify-between ${
-                      reserveDate === dayLabel
+                      reserveDate === isoDate
                         ? 'border-[#0F4C81] bg-[#EFF6FF] text-[#0F4C81]'
                         : 'border-gray-100 bg-white text-gray-700 hover:bg-gray-50'
                     }`}
                   >
                     <span>{dayLabel}</span>
-                    {reserveDate === dayLabel && <Check size={16} />}
+                    {reserveDate === isoDate && <Check size={16} />}
                   </button>
                 );
               })}

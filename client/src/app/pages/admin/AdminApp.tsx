@@ -204,15 +204,10 @@ export default function AdminApp() {
 
     const activeSessionsCount = (sessionsData || []).filter((s: any) => s.status === 'active').length;
 
-    const todayRevenue = (sessionsData || [])
-      .filter((s: any) => s.status === 'completed' && s.checkout_time && isToday(s.checkout_time))
-      .reduce((sum: number, s: any) => sum + Number(s.amount_charged), 0) || 0;
-
     const kpis = [
       { label: 'Total Users', value: totalUsers.toLocaleString(), change: `+${drivers.filter((d: any) => isToday(d.joined)).length} today`, icon: Users, color: '#0F4C81', bg: '#EFF6FF' },
       { label: 'Active Facilities', value: String(activeFacilities.length), change: `${pendingFacilities.length} pending`, icon: Building2, color: '#2E8B57', bg: '#F0FDF4' },
       { label: 'Active Sessions', value: String(activeSessionsCount), change: 'Right now', icon: Car, color: '#7C3AED', bg: '#F5F3FF' },
-      { label: "Today's Revenue", value: formatUGX(todayRevenue), change: 'Settled cash', icon: DollarSign, color: '#B45309', bg: '#FFFBEB' },
     ];
 
     return (
@@ -223,10 +218,24 @@ export default function AdminApp() {
               <p className="text-amber-200 text-sm">System Administrator</p>
               <h1 className="text-xl font-bold">{user?.name || 'Admin'}</h1>
             </div>
-            <div className="w-12 h-12 rounded-full bg-[#F4B400] flex items-center justify-center">
-              <span className="font-bold text-[#0F172A]">
-                {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase() : 'AD'}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-[#F4B400] flex items-center justify-center">
+                <span className="font-bold text-[#0F172A]">
+                  {user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase() : 'AD'}
+                </span>
+              </div>
+              <button
+                onClick={async () => {
+                  if (confirm('Are you sure you want to sign out?')) {
+                    await logout();
+                    navigate('/');
+                  }
+                }}
+                className="md:hidden p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={18} />
+              </button>
             </div>
           </div>
           <p className="text-amber-200 text-sm mt-2">
@@ -236,7 +245,7 @@ export default function AdminApp() {
 
         <div className="px-5 py-5 space-y-5">
           {/* KPIs */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {kpis.map((kpi) => (
               <div key={kpi.label} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
                 <div className="flex items-center gap-2 mb-2">
@@ -362,6 +371,18 @@ export default function AdminApp() {
               >
                 <Plus size={14} /> Add User
               </button>
+              <button
+                onClick={async () => {
+                  if (confirm('Are you sure you want to sign out?')) {
+                    await logout();
+                    navigate('/');
+                  }
+                }}
+                className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={16} />
+              </button>
             </div>
           </div>
           <div className="flex gap-1">
@@ -462,9 +483,23 @@ export default function AdminApp() {
               <h2 className="font-bold text-lg text-[#0F172A]">Facility Approval</h2>
               <p className="text-sm text-gray-500 mt-0.5">Review and approve submissions</p>
             </div>
-            <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full font-semibold">
-              {pending.length} pending
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full font-semibold">
+                {pending.length} pending
+              </span>
+              <button
+                onClick={async () => {
+                  if (confirm('Are you sure you want to sign out?')) {
+                    await logout();
+                    navigate('/');
+                  }
+                }}
+                className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -563,9 +598,23 @@ export default function AdminApp() {
               <h2 className="font-bold text-lg text-[#0F172A]">System Monitoring</h2>
               <p className="text-sm text-gray-500 mt-0.5">Real-time health & performance</p>
             </div>
-            <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium bg-green-50 px-2.5 py-1 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Operational
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium bg-green-50 px-2.5 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Operational
+              </span>
+              <button
+                onClick={async () => {
+                  if (confirm('Are you sure you want to sign out?')) {
+                    await logout();
+                    navigate('/');
+                  }
+                }}
+                className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
         </div>
 
