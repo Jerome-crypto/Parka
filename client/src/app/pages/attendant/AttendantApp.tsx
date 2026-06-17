@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   ScanLine, LayoutDashboard, Car, LogOut, Check, X,
-  Clock, User, MapPin, AlertCircle, Camera, Computer,
+  Clock, User, MapPin, AlertCircle, Camera,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -44,11 +44,7 @@ export default function AttendantApp() {
     reservation: string;
     id: string;
   } | null>(null);
-  const [selectedSimReservation, setSelectedSimReservation] = useState<any>(null);
   const [scanError, setScanError] = useState<string>('');
-  
-  // Real QR Camera Scan Mode State (default to true for full camera experience)
-  const [useCamera, setUseCamera] = useState<boolean>(true);
 
   // Fetch queries
   const { data: sessions, refetch: refetchSessions } = useSessions();
@@ -101,7 +97,6 @@ export default function AttendantApp() {
             setTimeout(() => {
               setScanState('idle');
               setScanResult(null);
-              setSelectedSimReservation(null);
               refetchSessions();
               refetchAvailability();
               refetchReservations();
@@ -121,10 +116,10 @@ export default function AttendantApp() {
     });
   };
 
-  // Unified camera scanner instance lifecycle hook
+  // Camera scanner instance lifecycle hook
   useEffect(() => {
     let isMounted = true;
-    const shouldStartScanner = useCamera && screen === 'scanner' && scanState === 'idle';
+    const shouldStartScanner = screen === 'scanner' && scanState === 'idle';
 
     if (shouldStartScanner) {
       const timer = setTimeout(async () => {
@@ -154,9 +149,10 @@ export default function AttendantApp() {
             {
               fps: 10,
               qrbox: (width, height) => {
-                const size = Math.min(width, height) * 0.75;
+                const size = Math.min(width, height) * 0.7;
                 return { width: size, height: size };
-              }
+              },
+              aspectRatio: 1.0,
             },
             async (decodedText) => {
               if (html5QrCode.isScanning) {
@@ -181,7 +177,7 @@ export default function AttendantApp() {
             setScanState('failure');
           }
         }
-      }, 300);
+      }, 500);
 
       return () => {
         isMounted = false;
@@ -200,22 +196,9 @@ export default function AttendantApp() {
         currentScanner.stop().catch(err => console.error("Scanner stop inactive cleanup failure:", err));
       }
     }
-  }, [useCamera, screen, scanState]);
+  }, [screen, scanState]);
 
-  function handleSimulateScan() {
-    if (!selectedSimReservation) {
-      setScanError('Please select a driver reservation to scan.');
-      setScanState('failure');
-      return;
-    }
 
-    setScanState('scanning');
-    setScanError('');
-
-    setTimeout(() => {
-      handleQRCodeScanned(selectedSimReservation.qr_code_token);
-    }, 1200);
-  }
 
   function handleConfirmCheckIn() {
     if (!scanResult) return;
@@ -223,7 +206,6 @@ export default function AttendantApp() {
       onSuccess: () => {
         setScanState('idle');
         setScanResult(null);
-        setSelectedSimReservation(null);
         refetchSessions();
         refetchAvailability();
         refetchReservations();
@@ -255,6 +237,8 @@ export default function AttendantApp() {
     setScanState('idle');
     setScanResult(null);
     setScanError('');
+    // Clean up scanner ref so it can be re-created
+    scannerRef.current = null;
   }
 
   const navItems = [
@@ -386,8 +370,6 @@ export default function AttendantApp() {
   }
 
   function renderScanner() {
-    const upcomingReservations = reservations?.filter((r: any) => r.status === 'upcoming') || [];
-
     return (
       <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
         <div className="bg-white border-b border-gray-100 px-4 pt-12 pb-4 flex justify-between items-center">
@@ -409,111 +391,68 @@ export default function AttendantApp() {
           </button>
         </div>
 
-        {/* Dual Scanner Tabs Interface */}
-        <div className="flex border-b border-gray-100 bg-white">
-          <button
-            onClick={() => { setUseCamera(true); resetScan(); }}
-            className={`flex-1 text-center py-3 font-semibold text-xs md:text-sm flex items-center justify-center gap-1.5 transition-all ${
-              useCamera
-                ? 'border-b-2 border-[#2E8B57] text-[#2E8B57] bg-green-50/10'
-                : 'text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            <Camera size={16} /> Real Camera Scan
-          </button>
-          <button
-            onClick={() => { setUseCamera(false); resetScan(); }}
-            className={`flex-1 text-center py-3 font-semibold text-xs md:text-sm flex items-center justify-center gap-1.5 transition-all ${
-              !useCamera
-                ? 'border-b-2 border-[#2E8B57] text-[#2E8B57] bg-green-50/10'
-                : 'text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            <Computer size={16} /> Simulated Dropdown
-          </button>
-        </div>
-
         <div className="px-4 py-6 space-y-5">
-          {/* Simulated Selector card */}
-          {!useCamera && scanState === 'idle' && (
-            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
-              <label className="block text-xs font-semibold text-gray-600 mb-2">Simulate Scan for Driver</label>
-              {upcomingReservations.length === 0 ? (
-                <p className="text-sm text-gray-400">No upcoming reservations found for this facility.</p>
-              ) : (
-                <select
-                  onChange={(e) => {
-                    const r = upcomingReservations.find((res: any) => res.id === e.target.value);
-                    setSelectedSimReservation(r || null);
-                  }}
-                  className="w-full text-sm border border-gray-200 rounded-xl p-2.5 bg-white text-gray-700 font-mono focus:ring-1 focus:ring-[#2E8B57] focus:outline-none"
-                  value={selectedSimReservation?.id || ''}
-                >
-                  <option value="">-- Select driver to scan --</option>
-                  {upcomingReservations.map((r: any) => (
-                    <option key={r.id} value={r.id}>
-                      {r.vehiclePlate} ({r.driverName}) - {r.code}
-                    </option>
-                  ))}
-                </select>
-              )}
+          {/* Scanner status banner */}
+          {scanState === 'idle' && (
+            <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center gap-3">
+              <div className="w-8 h-8 bg-[#2E8B57] rounded-lg flex items-center justify-center flex-shrink-0">
+                <Camera size={16} className="text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-green-800">Camera Active</p>
+                <p className="text-xs text-green-600">Point at a QR code to scan automatically</p>
+              </div>
             </div>
           )}
 
           {/* Scanner viewport */}
-          <div className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-square max-w-xs mx-auto flex items-center justify-center">
-            {/* Real HTML5 QR Code Video overlay container */}
-            {useCamera && (
-              <div
-                id="reader"
-                className={`absolute inset-0 w-full h-full bg-black z-20 ${scanState === 'idle' ? 'block' : 'hidden'}`}
-              />
-            )}
-
-            <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 opacity-90" />
-
-            {scanState !== 'success' && scanState !== 'failure' && (
+          <div className="relative rounded-2xl overflow-hidden aspect-square max-w-xs mx-auto">
+            {/* Camera feed container - always mounted when idle so html5-qrcode can render */}
+            {scanState === 'idle' && (
               <>
-                {[['top-5 left-5', 'top-0 left-0'], ['top-5 right-5', 'top-0 right-0'], ['bottom-5 left-5', 'bottom-0 left-0'], ['bottom-5 right-5', 'bottom-0 right-0']].map(([pos], i) => (
-                  <div key={i} className={`absolute ${pos} w-12 h-12 z-30 pointer-events-none`}>
-                    <div className={`absolute w-8 h-1 bg-[#2E8B57] ${i % 2 === 0 ? 'left-0' : 'right-0'} ${i < 2 ? 'top-0' : 'bottom-0'}`} />
-                    <div className={`absolute h-8 w-1 bg-[#2E8B57] ${i % 2 === 0 ? 'left-0' : 'right-0'} ${i < 2 ? 'top-0' : 'bottom-0'}`} />
+                <div
+                  id="reader"
+                  style={{ width: '100%', height: '100%' }}
+                />
+                {/* Corner bracket overlays on top of camera feed */}
+                {[['top-3 left-3'], ['top-3 right-3'], ['bottom-3 left-3'], ['bottom-3 right-3']].map(([pos], i) => (
+                  <div key={i} className={`absolute ${pos} w-10 h-10 z-30 pointer-events-none`}>
+                    <div className={`absolute w-7 h-1 bg-[#2E8B57] rounded-full ${i % 2 === 0 ? 'left-0' : 'right-0'} ${i < 2 ? 'top-0' : 'bottom-0'}`} />
+                    <div className={`absolute h-7 w-1 bg-[#2E8B57] rounded-full ${i % 2 === 0 ? 'left-0' : 'right-0'} ${i < 2 ? 'top-0' : 'bottom-0'}`} />
                   </div>
                 ))}
               </>
             )}
 
-            {scanState === 'idle' && !useCamera && (
-              <div className="relative z-10 text-center">
-                <ScanLine size={48} className="text-white/40 mx-auto mb-3 animate-pulse" />
-                <p className="text-white/60 text-sm">Select driver & click Simulate</p>
-              </div>
-            )}
+            {/* Non-idle states: show results on dark background */}
+            {scanState !== 'idle' && (
+              <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
+                {scanState === 'scanning' && (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-16 h-16 border-4 border-t-[#2E8B57] border-white/20 rounded-full animate-spin" />
+                    <p className="text-white/80 text-sm">Verifying QR Code...</p>
+                  </div>
+                )}
 
-            {scanState === 'scanning' && (
-              <div className="relative z-10 flex flex-col items-center gap-3">
-                <div className="w-16 h-16 border-4 border-t-[#2E8B57] border-white/20 rounded-full animate-spin" />
-                <p className="text-white/80 text-sm">Scanning QR Code...</p>
-              </div>
-            )}
+                {scanState === 'success' && (
+                  <div className="text-center px-6">
+                    <div className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-4">
+                      <Check size={36} className="text-white" />
+                    </div>
+                    <p className="text-white font-bold text-lg">Verified!</p>
+                    <p className="text-green-300 text-sm mt-1">Valid reservation</p>
+                  </div>
+                )}
 
-            {scanState === 'success' && (
-              <div className="relative z-10 text-center px-6">
-                <div className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-4">
-                  <Check size={36} className="text-white" />
-                </div>
-                <p className="text-white font-bold text-lg">Verified!</p>
-                <p className="text-green-300 text-sm mt-1">Valid reservation</p>
-              </div>
-            )}
-
-            {scanState === 'failure' && (
-              <div className="relative z-10 text-center px-6">
-                <div className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center mx-auto mb-4">
-                  <X size={36} className="text-white" />
-                </div>
-                <p className="text-white font-bold text-lg">Invalid!</p>
-                <p className="text-red-300 text-sm mt-1">Scan failed</p>
+                {scanState === 'failure' && (
+                  <div className="text-center px-6">
+                    <div className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center mx-auto mb-4">
+                      <X size={36} className="text-white" />
+                    </div>
+                    <p className="text-white font-bold text-lg">Invalid!</p>
+                    <p className="text-red-300 text-sm mt-1">Scan failed</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -559,23 +498,17 @@ export default function AttendantApp() {
           )}
 
           {/* Controls */}
-          <div className="flex gap-3">
-            {scanState !== 'idle' && (
-              <button onClick={resetScan} className="flex-1 py-3 border border-gray-200 text-gray-700 rounded-xl font-medium text-sm transition-colors hover:bg-gray-55">
-                Reset Scanner
-              </button>
-            )}
-            {!useCamera && (scanState === 'idle' || scanState !== 'scanning') && (
+          {scanState !== 'idle' && (
+            <div className="flex gap-3">
               <button
-                onClick={handleSimulateScan}
-                disabled={scanState === 'scanning' || !selectedSimReservation}
-                className="flex-1 py-3 bg-[#2E8B57] text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity"
+                onClick={resetScan}
+                className="flex-1 py-3 bg-[#2E8B57] text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
               >
-                <ScanLine size={16} />
-                Simulate Scan
+                <Camera size={16} />
+                Scan Again
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     );

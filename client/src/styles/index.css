@@ -1,3 +1,36 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/* html5-qrcode scanner overrides */
+#reader {
+  border: none !important;
+  background: #000;
+}
+
+#reader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 1rem;
+}
+
+/* Hide the library's built-in scan region text */
+#reader__scan_region > img,
+#reader__dashboard_section,
+#reader__status_span,
+#reader__header_message {
+  display: none !important;
+}
+
+/* Style the scan region border */
+#reader__scan_region {
+  border: none !important;
+  min-height: unset !important;
+}
+
+/* Remove any padding the library adds */
+#reader > div {
+  border: none !important;
+  box-shadow: none !important;
+}
