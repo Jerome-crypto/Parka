@@ -1,6 +1,8 @@
 import { useState, useEffect, type ReactElement } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSocket } from '../../contexts/SocketContext';
 import {
   Home, Search, Bell, User, MapPin, Clock, Star, Shield, ChevronRight,
   Navigation, Zap, Filter, List, Map, ArrowLeft, Car, Calendar,
@@ -112,7 +114,34 @@ function CityMapSVG({
 
 export default function DriverApp() {
   const navigate = useNavigate();
-  
+  const queryClient = useQueryClient();
+  const socket = useSocket();
+
+  // Listen to live socket notifications to refetch query data (like checkin/checkout updates)
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNotification = (notification: any) => {
+      console.log('Real-time notification received:', notification);
+      queryClient.invalidateQueries({ queryKey: ['reservations'] });
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['facilities'] });
+    };
+
+    const handleFacilityUpdate = () => {
+      queryClient.invalidateQueries({ queryKey: ['facilities'] });
+    };
+
+    socket.on('notification_created', handleNotification);
+    socket.on('facility_availability_updated', handleFacilityUpdate);
+
+    return () => {
+      socket.off('notification_created', handleNotification);
+      socket.off('facility_availability_updated', handleFacilityUpdate);
+    };
+  }, [socket, queryClient]);
+
   // Live queries
   const { data: dbFacilities = [] } = useFacilities();
   const { data: dbVehicles = [] } = useVehicles();

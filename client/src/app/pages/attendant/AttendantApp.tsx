@@ -22,6 +22,7 @@ export default function AttendantApp() {
   const { user, logout } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const startPromiseRef = useRef<Promise<any> | null>(null);
   const [screen, setScreenState] = useState<Screen>(() => {
     return (searchParams.get('screen') as Screen) || 'dashboard';
   });
@@ -116,6 +117,20 @@ export default function AttendantApp() {
     });
   };
 
+  // Helper to safely stop the scanner, ensuring any pending start operation has resolved first
+  const safeStopScanner = async (scanner: Html5Qrcode) => {
+    try {
+      if (startPromiseRef.current) {
+        await startPromiseRef.current.catch(() => {});
+      }
+      if (scanner.isScanning) {
+        await scanner.stop();
+      }
+    } catch (err) {
+      console.warn("safeStopScanner warning:", err);
+    }
+  };
+
   // Camera scanner instance lifecycle hook
   useEffect(() => {
     let isMounted = true;
@@ -129,13 +144,7 @@ export default function AttendantApp() {
 
           // Cleanup any existing instance on the DOM
           if (scannerRef.current) {
-            try {
-              if (scannerRef.current.isScanning) {
-                await scannerRef.current.stop();
-              }
-            } catch (stopErr) {
-              console.warn("Stopping existing scanner failed:", stopErr);
-            }
+            await safeStopScanner(scannerRef.current);
             scannerRef.current = null;
           }
 
@@ -144,7 +153,7 @@ export default function AttendantApp() {
           const html5QrCode = new Html5Qrcode("reader");
           scannerRef.current = html5QrCode;
 
-          await html5QrCode.start(
+          const startPromise = html5QrCode.start(
             { facingMode: "environment" },
             {
               fps: 10,
@@ -155,14 +164,9 @@ export default function AttendantApp() {
               aspectRatio: 1.0,
             },
             async (decodedText) => {
-              if (html5QrCode.isScanning) {
-                try {
-                  await html5QrCode.stop();
-                } catch (stopErr) {
-                  console.error("Error stopping scanner on scan:", stopErr);
-                }
-              }
               if (isMounted) {
+                // Stop scanning immediately upon detection
+                await safeStopScanner(html5QrCode);
                 handleQRCodeScanned(decodedText);
               }
             },
@@ -170,6 +174,9 @@ export default function AttendantApp() {
               // Fail silently on scan loops (quiet mode)
             }
           );
+
+          startPromiseRef.current = startPromise;
+          await startPromise;
         } catch (e: any) {
           console.error("Scanner setup error:", e);
           if (isMounted) {
@@ -184,16 +191,14 @@ export default function AttendantApp() {
         clearTimeout(timer);
         const currentScanner = scannerRef.current;
         if (currentScanner) {
-          if (currentScanner.isScanning) {
-            currentScanner.stop().catch(err => console.error("Scanner stop cleanup failure:", err));
-          }
+          safeStopScanner(currentScanner);
         }
       };
     } else {
       // Ensure running scanner is stopped when not on active scanning tab/state
       const currentScanner = scannerRef.current;
-      if (currentScanner && currentScanner.isScanning) {
-        currentScanner.stop().catch(err => console.error("Scanner stop inactive cleanup failure:", err));
+      if (currentScanner) {
+        safeStopScanner(currentScanner);
       }
     }
   }, [screen, scanState]);
@@ -237,8 +242,7 @@ export default function AttendantApp() {
     setScanState('idle');
     setScanResult(null);
     setScanError('');
-    // Clean up scanner ref so it can be re-created
-    scannerRef.current = null;
+    // The useEffect hook manages stopping and cleaning up the scanner instance ref
   }
 
   const navItems = [
