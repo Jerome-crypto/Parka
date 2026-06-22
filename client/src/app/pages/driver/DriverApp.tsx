@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactElement } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   Home, Search, Bell, User, MapPin, Clock, Star, Shield, ChevronRight,
@@ -24,46 +25,9 @@ type Screen =
   | 'detail' | 'reserve' | 'confirmed' | 'session' | 'checkout' | 'receipt';
 
 function QRCodeDisplay({ value }: { value: string }) {
-  const size = 17;
-  const seed = (row: number, col: number) => {
-    const h = value.charCodeAt((row * size + col) % value.length);
-    const isCorner =
-      (row < 5 && col < 5) || (row < 5 && col >= size - 5) || (row >= size - 5 && col < 5);
-    if (isCorner) {
-      const r = row % (size - 1 < 5 ? size - 1 : 5);
-      const c = col % (size - 1 < 5 ? size - 1 : 5);
-      if (r === 0 || r === 4 || c === 0 || c === 4) return true;
-      if (r >= 1 && r <= 3 && c >= 1 && c <= 3 && r === 2 && c === 2) return true;
-      return false;
-    }
-    return (h * 7 + row * 13 + col * 17) % 3 !== 0;
-  };
-  const cells = Array.from({ length: size * size }, (_, i) => {
-    const row = Math.floor(i / size);
-    const col = i % size;
-    return seed(row, col);
-  });
   return (
     <div className="p-3 bg-white rounded-xl inline-block shadow-sm border border-gray-100">
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${size}, 10px)`,
-          gap: 1,
-        }}
-      >
-        {cells.map((filled, i) => (
-          <div
-            key={i}
-            style={{
-              width: 10,
-              height: 10,
-              background: filled ? '#0F172A' : '#FFFFFF',
-              borderRadius: filled ? 1 : 0,
-            }}
-          />
-        ))}
-      </div>
+      <QRCodeSVG value={value} size={160} />
     </div>
   );
 }

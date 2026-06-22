@@ -414,6 +414,14 @@ export default function AttendantApp() {
                   id="reader"
                   style={{ width: '100%', height: '100%' }}
                 />
+                {/* Visual scanner indicator overlays */}
+                <div className="scanner-laser" />
+                <div className="absolute inset-x-0 bottom-6 flex justify-center z-30 pointer-events-none">
+                  <div className="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-white/10 scanner-pulse">
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping" />
+                    <span className="text-white text-xs font-semibold tracking-wider uppercase">Scanning...</span>
+                  </div>
+                </div>
                 {/* Corner bracket overlays on top of camera feed */}
                 {[['top-3 left-3'], ['top-3 right-3'], ['bottom-3 left-3'], ['bottom-3 right-3']].map(([pos], i) => (
                   <div key={i} className={`absolute ${pos} w-10 h-10 z-30 pointer-events-none`}>
