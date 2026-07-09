@@ -112,6 +112,13 @@ function CityMapSVG({
   );
 }
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning,';
+  if (hour < 17) return 'Good afternoon,';
+  return 'Good evening,';
+}
+
 export default function DriverApp() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -461,7 +468,7 @@ export default function DriverApp() {
         <div className="bg-[#0F4C81] px-5 pt-12 pb-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-blue-200 text-sm">Good morning,</p>
+              <p className="text-blue-200 text-sm">{getGreeting()}</p>
               <h1 className="text-white text-xl font-semibold">{user?.name || 'Driver'}</h1>
             </div>
             <div className="w-10 h-10 rounded-full bg-[#F4B400] flex items-center justify-center">

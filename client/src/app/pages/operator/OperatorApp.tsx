@@ -28,6 +28,13 @@ const formatUGX = (n: any) => {
   return `UGX ${parsed.toLocaleString()}`;
 };
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning,';
+  if (hour < 17) return 'Good afternoon,';
+  return 'Good evening,';
+}
+
 export default function OperatorApp() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -218,7 +225,7 @@ export default function OperatorApp() {
         <div className="bg-[#7C3AED] px-6 pt-8 pb-6 text-white">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-purple-200 text-sm">Good afternoon,</p>
+              <p className="text-purple-200 text-sm">{getGreeting()}</p>
               <h1 className="text-xl font-bold">{user?.name || 'Operator'}</h1>
               <p className="text-purple-200 text-sm mt-1">
                 {facilitiesData?.length || 0} Managed Parking Facilities
