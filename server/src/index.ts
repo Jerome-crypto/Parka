@@ -11,6 +11,7 @@ import { seedDatabase } from './database/seed';
 import { errorHandler } from './middleware/errorHandler';
 import { initSocket } from './services/socketService';
 import { logger } from './utils/logger';
+import { initReservationScheduler } from './services/reservationScheduler';
 
 // Import routers
 import authRouter from './modules/auth/auth.router';
@@ -146,6 +147,9 @@ const startServer = async () => {
 
     server.listen(env.PORT, () => {
       logger.info(`🚀 Parka server successfully started on port ${env.PORT} in ${env.NODE_ENV} mode.`);
+
+      // ── AUTO-CANCELLATION: Sweep overdue no-show reservations (> 30 min) ──
+      initReservationScheduler();
 
       // ── KEEPALIVE: prevent Render free-tier from spinning down ────────────
       // Render free tier sleeps after 15 min of inactivity.

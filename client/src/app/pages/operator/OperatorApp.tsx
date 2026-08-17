@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import {
   LayoutDashboard, Building2, Tag, Calendar, BarChart2, LogOut,
   TrendingUp, Car, DollarSign, Edit, Plus, Check, X, Trash2,
+  Users, UserPlus, Clock, Mail, Phone, Search, Key, Shield,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -17,9 +18,12 @@ import {
   useReservations,
   useCreateFacility,
   useUpdateFacility,
+  useOperatorAttendants,
+  useCreateAttendant,
+  useDeleteAttendant,
 } from '../../services/queries';
 
-type Screen = 'dashboard' | 'facilities' | 'pricing' | 'reservations' | 'reports';
+type Screen = 'dashboard' | 'facilities' | 'attendants' | 'pricing' | 'reservations' | 'reports';
 
 const formatUGX = (n: any) => {
   if (n === undefined || n === null) return 'UGX 0';
@@ -56,6 +60,17 @@ export default function OperatorApp() {
 
   const [showAddFacilityModal, setShowAddFacilityModal] = useState(false);
   const [showAddSpecialRateModal, setShowAddSpecialRateModal] = useState(false);
+  const [showAddAttendantModal, setShowAddAttendantModal] = useState(false);
+
+  // Attendant Form states
+  const [attName, setAttName] = useState('');
+  const [attEmail, setAttEmail] = useState('');
+  const [attPhone, setAttPhone] = useState('');
+  const [attPassword, setAttPassword] = useState('');
+  const [attFacilityId, setAttFacilityId] = useState('');
+  const [attShift, setAttShift] = useState('Day Shift (8AM - 5PM)');
+  const [attFilterFacility, setAttFilterFacility] = useState<string>('all');
+  const [attSearch, setAttSearch] = useState('');
 
   // Form states for adding facility
   const [facName, setFacName] = useState('');
@@ -82,9 +97,50 @@ export default function OperatorApp() {
   // Mutations
   const createFacilityMutation = useCreateFacility();
   const updateFacilityMutation = useUpdateFacility();
+  const createAttendantMutation = useCreateAttendant();
+  const deleteAttendantMutation = useDeleteAttendant();
 
   const [showEditFacilityModal, setShowEditFacilityModal] = useState(false);
   const [selectedEditFacility, setSelectedEditFacility] = useState<any>(null);
+
+  const handleAddAttendant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!attName.trim() || !attEmail.trim() || !attPassword.trim() || !attFacilityId) {
+      alert('Please fill out all required fields (Name, Email, Password, and Facility).');
+      return;
+    }
+    try {
+      await createAttendantMutation.mutateAsync({
+        name: attName.trim(),
+        email: attEmail.trim(),
+        phone: attPhone.trim() || undefined,
+        password: attPassword,
+        facilityId: attFacilityId,
+        shiftInfo: attShift || 'Day Shift (8AM - 5PM)',
+      });
+      alert('Attendant successfully registered and assigned!');
+      setShowAddAttendantModal(false);
+      setAttName('');
+      setAttEmail('');
+      setAttPhone('');
+      setAttPassword('');
+      setAttFacilityId('');
+      setAttShift('Day Shift (8AM - 5PM)');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to add attendant.');
+    }
+  };
+
+  const handleDeleteAttendant = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to remove attendant "${name}"? This action cannot be undone.`)) {
+      try {
+        await deleteAttendantMutation.mutateAsync(id);
+        alert('Attendant removed successfully.');
+      } catch (err: any) {
+        alert(err.response?.data?.message || 'Failed to remove attendant.');
+      }
+    }
+  };
 
   const handleEditFacility = async (e: any) => {
     e.preventDefault();
@@ -186,10 +242,12 @@ export default function OperatorApp() {
   const { data: facilitiesData, isLoading: facLoading } = useOperatorFacilities();
   const { data: reportsData, isLoading: repLoading } = useOperatorReports();
   const { data: reservationsData, isLoading: resLoading } = useReservations();
+  const { data: attendantsData, isLoading: attLoading } = useOperatorAttendants();
 
   const navItems: { id: Screen; icon: typeof LayoutDashboard; label: string }[] = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'facilities', icon: Building2, label: 'Facilities' },
+    { id: 'attendants', icon: Users, label: 'Attendants' },
     { id: 'pricing', icon: Tag, label: 'Pricing' },
     { id: 'reservations', icon: Calendar, label: 'Reservations' },
     { id: 'reports', icon: BarChart2, label: 'Reports' },
@@ -466,6 +524,171 @@ export default function OperatorApp() {
                 </div>
               );
             })
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function renderAttendants() {
+    const facilities = facilitiesData || [];
+    const allAttendants: any[] = attendantsData || [];
+
+    const filtered = allAttendants.filter((a: any) => {
+      const matchFac = attFilterFacility === 'all' || a.facilityId === attFilterFacility;
+      const matchSearch =
+        !attSearch ||
+        a.name?.toLowerCase().includes(attSearch.toLowerCase()) ||
+        a.email?.toLowerCase().includes(attSearch.toLowerCase()) ||
+        a.facilityName?.toLowerCase().includes(attSearch.toLowerCase());
+      return matchFac && matchSearch;
+    });
+
+    return (
+      <div className="flex-1 overflow-y-auto">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-100 px-5 pt-8 pb-4">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="font-bold text-lg text-[#0F172A]">Attendant Management</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {allAttendants.length} attendant{allAttendants.length !== 1 ? 's' : ''} across your facilities
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setAttFacilityId(facilities[0]?.id || '');
+                  setShowAddAttendantModal(true);
+                }}
+                className="flex items-center gap-1.5 bg-[#7C3AED] text-white text-sm font-medium px-4 py-2 rounded-xl hover:bg-purple-700 transition-colors"
+              >
+                <UserPlus size={15} /> Add Attendant
+              </button>
+              <button
+                onClick={async () => { if (confirm('Sign out?')) { await logout(); navigate('/'); }}}
+                className="md:hidden p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                title="Sign Out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search attendants..."
+                value={attSearch}
+                onChange={(e) => setAttSearch(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+              />
+            </div>
+            <select
+              value={attFilterFacility}
+              onChange={(e) => setAttFilterFacility(e.target.value)}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-gray-700"
+            >
+              <option value="all">All Facilities</option>
+              {facilities.map((f: any) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-5 py-5">
+          {attLoading ? (
+            <div className="flex justify-center py-16">
+              <div className="w-10 h-10 border-4 border-t-[#7C3AED] border-gray-200 rounded-full animate-spin" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-16 h-16 rounded-full bg-purple-50 flex items-center justify-center mb-4">
+                <Users size={28} className="text-[#7C3AED]" />
+              </div>
+              <p className="font-semibold text-[#0F172A] mb-1">
+                {allAttendants.length === 0 ? 'No attendants yet' : 'No results found'}
+              </p>
+              <p className="text-sm text-gray-400 mb-5">
+                {allAttendants.length === 0
+                  ? 'Add your first attendant to manage parking check-ins.'
+                  : 'Try a different name or facility filter.'}
+              </p>
+              {allAttendants.length === 0 && (
+                <button
+                  onClick={() => { setAttFacilityId(facilities[0]?.id || ''); setShowAddAttendantModal(true); }}
+                  className="flex items-center gap-2 bg-[#7C3AED] text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-purple-700 transition-colors"
+                >
+                  <UserPlus size={15} /> Add First Attendant
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {filtered.map((a: any) => (
+                <div key={a.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-3">
+                    {/* Avatar */}
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center flex-shrink-0">
+                      <span className="text-white font-bold text-sm">
+                        {a.name ? a.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) : 'AT'}
+                      </span>
+                    </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className="font-semibold text-[#0F172A] truncate">{a.name}</p>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+                          a.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                        }`}>
+                          {a.status === 'active' ? 'Active' : 'Suspended'}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                          <Mail size={11} className="text-gray-400" />
+                          <span className="truncate">{a.email}</span>
+                        </div>
+                        {a.phone && (
+                          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                            <Phone size={11} className="text-gray-400" />
+                            <span>{a.phone}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                          <Building2 size={11} className="text-gray-400" />
+                          <span className="truncate">{a.facilityName}</span>
+                        </div>
+                        {a.shiftInfo && (
+                          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                            <Clock size={11} className="text-gray-400" />
+                            <span>{a.shiftInfo}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {/* Actions */}
+                    <button
+                      onClick={() => handleDeleteAttendant(a.id, a.name)}
+                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                      title="Remove attendant"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  {/* Credentials hint */}
+                  <div className="mt-3 pt-3 border-t border-gray-50 flex items-center gap-1.5 text-xs text-gray-400">
+                    <Key size={11} />
+                    <span>Login: <span className="font-medium text-gray-600">{a.email}</span> · Can scan QR codes and check-in/out drivers</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -816,6 +1039,7 @@ export default function OperatorApp() {
   const screenMap: Record<Screen, JSX.Element> = {
     dashboard: renderDashboard(),
     facilities: renderFacilities(),
+    attendants: renderAttendants(),
     pricing: renderPricing(),
     reservations: renderReservations(),
     reports: renderReports(),
@@ -1261,6 +1485,141 @@ export default function OperatorApp() {
                 className="w-full mt-4 py-3 bg-[#7C3AED] text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-purple-700 transition-colors"
               >
                 {updateFacilityMutation.isPending ? 'Updating...' : 'Save Updates'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Attendant Modal */}
+      {showAddAttendantModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <UserPlus size={16} className="text-[#7C3AED]" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-[#0F172A]">Add Attendant</h3>
+                  <p className="text-xs text-gray-400">Register a new parking attendant</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAddAttendantModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+                <X size={18} className="text-gray-500" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddAttendant} className="px-6 py-5 space-y-4">
+              {/* Facility */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                  Assign to Facility <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={attFacilityId}
+                  onChange={(e) => setAttFacilityId(e.target.value)}
+                  required
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-gray-700"
+                >
+                  <option value="">Select a facility…</option>
+                  {(facilitiesData || []).map((f: any) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                  Full Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. James Okello"
+                  value={attName}
+                  onChange={(e) => setAttName(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                  Email Address <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="attendant@example.com"
+                  value={attEmail}
+                  onChange={(e) => setAttEmail(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                />
+              </div>
+
+              {/* Phone (optional) */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Phone (optional)</label>
+                <input
+                  type="tel"
+                  placeholder="+256 700 000 000"
+                  value={attPhone}
+                  onChange={(e) => setAttPhone(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                  Password <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="Min 6 characters"
+                  value={attPassword}
+                  onChange={(e) => setAttPassword(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-[#0F172A]"
+                />
+              </div>
+
+              {/* Shift Info */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Shift / Schedule</label>
+                <select
+                  value={attShift}
+                  onChange={(e) => setAttShift(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-xl p-3 bg-slate-50 focus:ring-1 focus:ring-[#7C3AED] outline-none text-gray-700"
+                >
+                  <option>Day Shift (8AM - 5PM)</option>
+                  <option>Evening Shift (5PM - 12AM)</option>
+                  <option>Night Shift (12AM - 8AM)</option>
+                  <option>Full Day (24/7)</option>
+                </select>
+              </div>
+
+              {/* Info banner */}
+              <div className="bg-purple-50 rounded-xl p-3 flex items-start gap-2">
+                <Shield size={14} className="text-[#7C3AED] mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-purple-700">
+                  The attendant will be able to log in immediately with the email and password you set, and scan QR codes for check-in / check-out at their assigned facility.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={createAttendantMutation.isPending}
+                className="w-full py-3 bg-[#7C3AED] text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 hover:bg-purple-700 transition-colors disabled:opacity-60"
+              >
+                {createAttendantMutation.isPending ? (
+                  <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Registering…</>
+                ) : (
+                  <><UserPlus size={15} /> Register Attendant</>
+                )}
               </button>
             </form>
           </div>

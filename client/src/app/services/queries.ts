@@ -381,6 +381,51 @@ export const useOperatorReports = () => {
   });
 };
 
+export const useOperatorAttendants = () => {
+  return useQuery({
+    queryKey: ['operator', 'attendants'],
+    queryFn: async () => {
+      const res = await apiClient.get('/operator/attendants');
+      return res.data.data.attendants || [];
+    },
+  });
+};
+
+export const useCreateAttendant = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      facilityId: string;
+      name: string;
+      email: string;
+      phone?: string;
+      password: string;
+      shiftInfo?: string;
+    }) => {
+      const res = await apiClient.post('/operator/attendants', data);
+      return res.data.data.attendant;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['operator', 'attendants'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+    },
+  });
+};
+
+export const useDeleteAttendant = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiClient.delete(`/operator/attendants/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['operator', 'attendants'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+    },
+  });
+};
+
 // --- ADMIN ENDPOINTS ---
 export const useAdminUsers = () => {
   return useQuery({

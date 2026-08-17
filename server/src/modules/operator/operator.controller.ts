@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { query } from '../../config/database';
+import { pool, query } from '../../config/database';
 import { AppError } from '../../utils/appError';
 
 const pricingRuleSchema = z.object({
@@ -502,3 +503,166 @@ export const createSpace = async (req: Request, res: Response, next: NextFunctio
     next(err);
   }
 };
+
+const createAttendantSchema = z.object({
+  facilityId: z.string().uuid('Invalid facility ID'),
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email('Invalid email address'),
+  phone: z.string().optional(),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  shiftInfo: z.string().optional(),
+});
+
+export const getOperatorAttendants = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+
+    let queryStr = `
+      SELECT u.id, u.name, u.email, u.phone, u.status, u.created_at as "createdAt",
+             ap.id as "profileId", ap.facility_id as "facilityId", ap.shift_info as "shiftInfo",
+             f.name as "facilityName"
+      FROM users u
+      JOIN roles r ON u.role_id = r.id
+      JOIN attendant_profiles ap ON ap.user_id = u.id
+      JOIN parking_facilities f ON ap.facility_id = f.id
+    `;
+    const params: unknown[] = [];
+
+    if (req.user.role === 'OPERATOR') {
+      queryStr += ' WHERE f.operator_id = $1';
+      params.push(req.user.id);
+    }
+
+    queryStr += ' ORDER BY u.created_at DESC';
+
+    const result = await query(queryStr, params);
+
+    res.status(200).json({
+      status: 'success',
+      data: { attendants: result.rows },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const createOperatorAttendant = async (req: Request, res: Response, next: NextFunction) => {
+  const client = await pool.connect();
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+    const validated = createAttendantSchema.parse(req.body);
+
+    // 1. Verify that operator owns the target facility (or is ADMIN)
+    if (req.user.role === 'OPERATOR') {
+      const owns = await assertOperatorOwnsFacility(req.user.id, validated.facilityId);
+      if (!owns) {
+        return next(new AppError('You do not own this parking facility.', 403));
+      }
+    }
+
+    // 2. Check if email exists
+    const userCheck = await client.query('SELECT id FROM users WHERE email = $1', [validated.email.toLowerCase()]);
+    if (userCheck.rows.length > 0) {
+      return next(new AppError('A user with this email address already exists.', 400));
+    }
+
+    // 3. Get ATTENDANT role ID
+    const roleRes = await client.query("SELECT id FROM roles WHERE name = 'ATTENDANT'");
+    if (roleRes.rows.length === 0) {
+      return next(new AppError('Attendant role not configured.', 500));
+    }
+    const roleId = roleRes.rows[0].id;
+
+    // 4. Hash password
+    const passwordHash = await bcrypt.hash(validated.password, 12);
+
+    await client.query('BEGIN');
+
+    // 5. Create user
+    const userRes = await client.query(
+      `INSERT INTO users (role_id, name, email, phone, password_hash, status, is_verified)
+       VALUES ($1, $2, $3, $4, $5, 'active', true)
+       RETURNING id, name, email, phone, status, created_at as "createdAt"`,
+      [roleId, validated.name, validated.email.toLowerCase(), validated.phone || null, passwordHash]
+    );
+    const newUser = userRes.rows[0];
+
+    // 6. Create attendant profile linked to facility
+    const profileRes = await client.query(
+      `INSERT INTO attendant_profiles (user_id, facility_id, shift_info)
+       VALUES ($1, $2, $3)
+       RETURNING id as "profileId", facility_id as "facilityId", shift_info as "shiftInfo"`,
+      [newUser.id, validated.facilityId, validated.shiftInfo || 'Day Shift (8AM - 5PM)']
+    );
+    const newProfile = profileRes.rows[0];
+
+    // Fetch facility name
+    const facRes = await client.query('SELECT name FROM parking_facilities WHERE id = $1', [validated.facilityId]);
+    const facilityName = facRes.rows[0]?.name || '';
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Attendant successfully registered and assigned.',
+      data: {
+        attendant: {
+          ...newUser,
+          ...newProfile,
+          facilityName,
+        },
+      },
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err instanceof z.ZodError) {
+      return next(new AppError(err.errors[0].message, 400));
+    }
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+
+export const deleteOperatorAttendant = async (req: Request, res: Response, next: NextFunction) => {
+  const client = await pool.connect();
+  try {
+    if (!req.user) return next(new AppError('Unauthorized', 401));
+    const { id } = req.params;
+
+    // Verify attendant belongs to operator's facility
+    const attendantCheck = await client.query(
+      `SELECT ap.id, ap.user_id, f.id as facility_id, f.operator_id
+       FROM attendant_profiles ap
+       JOIN parking_facilities f ON ap.facility_id = f.id
+       WHERE ap.user_id = $1`,
+      [id]
+    );
+
+    if (attendantCheck.rows.length === 0) {
+      return next(new AppError('Attendant not found.', 404));
+    }
+
+    const attendant = attendantCheck.rows[0];
+
+    if (req.user.role === 'OPERATOR' && attendant.operator_id !== req.user.id) {
+      return next(new AppError('Unauthorized to manage this attendant.', 403));
+    }
+
+    await client.query('BEGIN');
+    // Cascade will remove attendant_profiles, or delete user directly
+    await client.query('DELETE FROM users WHERE id = $1', [id]);
+    await client.query('COMMIT');
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Attendant removed successfully.',
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
+

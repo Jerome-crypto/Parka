@@ -334,9 +334,9 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 
     const user = userRes.rows[0];
 
-    // Generate crypto token
+    // Generate crypto token (valid 1 hour)
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetExpires = new Date(Date.now() + 3600000); // 1 hour
+    const resetExpires = new Date(Date.now() + 3600000);
 
     await query(
       'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3',
@@ -344,12 +344,26 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
     );
 
     const resetUrl = `${env.CLIENT_URL}/reset-password?token=${resetToken}`;
+
+    // Attempt to send real email
+    const smtpConfigured = env.SMTP_USER && !env.SMTP_USER.includes('your_gmail_address');
     await sendEmail({
       to: user.email,
       subject: 'Reset your Parka password',
       text: `Hello ${user.name},\n\nYou requested a password reset. Please click the link to reset your password: ${resetUrl}\n\nThis link is valid for 1 hour.`,
       html: `<p>Hello ${user.name},</p><p>You requested a password reset. Please click <a href="${resetUrl}">here</a> to reset your password.</p><p>This link is valid for 1 hour.</p>`,
     });
+
+    // In development without SMTP configured, return the reset URL directly
+    // so the feature is testable without email setup.
+    if (!smtpConfigured && env.NODE_ENV !== 'production') {
+      return res.status(200).json({
+        status: 'success',
+        message: 'SMTP not configured – reset link returned directly for development testing.',
+        devResetUrl: resetUrl,
+        devToken: resetToken,
+      });
+    }
 
     res.status(200).json({
       status: 'success',

@@ -10,6 +10,9 @@ import {
   getOperatorReports,
   getPricingRules,
   updatePricingRule,
+  getOperatorAttendants,
+  createOperatorAttendant,
+  deleteOperatorAttendant,
 } from './operator.controller';
 import { protect, restrictTo } from '../../middleware/auth';
 
@@ -29,4 +32,10 @@ router.get('/facilities/:facilityId/layout', getFacilityLayout);
 router.post('/zones', createZone);
 router.post('/spaces', createSpace);
 
+// Attendants management for Operator
+router.get('/attendants', getOperatorAttendants);
+router.post('/attendants', createOperatorAttendant);
+router.delete('/attendants/:id', deleteOperatorAttendant);
+
 export default router;
+
