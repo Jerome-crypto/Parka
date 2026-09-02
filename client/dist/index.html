@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- SEO Meta Tags -->
+    <title>Parka | Smart Real-Time Parking in Kampala</title>
+    <meta name="description" content="Find, reserve, and pay for parking spaces in Kampala in real-time. Navigate easily and pay via MTN MoMo, Airtel Money, or Cash." />
+    
+    <!-- PWA Integration -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="theme-color" content="#0F4C81" />
+    
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Parka" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+
+    
+    <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+    
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
+            .catch((err) => console.error('Service Worker registration failed:', err));
+        });
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/index-EBV63Cxn.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-_p3ElTrU.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-query-BOQK4sD4.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-socket-BIIei4U1.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-icons-CRP6zAHH.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-qr-_ZV5FaCw.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-DOO3eaLh.css">
+  </head>
+
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

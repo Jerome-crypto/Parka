@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#0F4C81"/>
+  <!-- Decorative background circles -->
+  <circle cx="256" cy="256" r="180" fill="#FFFFFF" opacity="0.05" />
+  <circle cx="256" cy="256" r="130" fill="#FFFFFF" opacity="0.08" />
+  <!-- Map pin shadow -->
+  <path d="M256 120 C180 120 120 180 120 256 C120 350 256 460 256 460 C256 460 392 350 392 256 C392 180 332 120 256 120 Z" fill="#0B3C68" opacity="0.3" transform="translate(0, 10)" />
+  <!-- Map pin -->
+  <path d="M256 100 C180 100 120 160 120 236 C120 330 256 440 256 440 C256 440 392 330 392 236 C392 160 332 100 256 100 Z" fill="#F4B400"/>
+  <!-- Map pin center white cutout -->
+  <circle cx="256" cy="220" r="64" fill="#FFFFFF"/>
+  <!-- Inner blue circle -->
+  <circle cx="256" cy="220" r="54" fill="#0F4C81"/>
+  <!-- Letter P -->
+  <text x="256" y="248" font-family="'Outfit', 'Inter', 'Segoe UI', sans-serif" font-size="80" font-weight="900" fill="#FFFFFF" text-anchor="middle">P</text>
+</svg>
